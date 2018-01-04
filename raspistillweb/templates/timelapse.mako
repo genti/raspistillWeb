@@ -9,7 +9,7 @@
           <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
           <p><strong>Time-lapse in progress.</strong> Refresh the page to update the progress bar.</p>
           <div class="progress">
-            <div class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width: 60%;">60%</div>
+            <div class="progress-bar" role="progressbar" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width: ${percentage_completed}%;">${percentage_completed}%</div>
           </div>
           Please wait until the time-lapse acquisition has finished or press the button below to stop the process.
           <button type="button" class="btn btn-danger btn-sm" onclick="location.href='/timelapse_stop'">Stop Time-lapse</button>

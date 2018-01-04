@@ -18,6 +18,7 @@ from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPFound
 #import exifread
 import os
+import os.path
 import shutil
 import signal
 import threading
@@ -35,7 +36,7 @@ from PIL import Image
 from bqapi.comm import BQSession#, BQCommError
 from bqapi.util import save_blob
 from lxml import etree
-#from time import time
+from time import time
 from socket import gethostname
 import picamera
 
@@ -106,6 +107,8 @@ THUMBNAIL_JPEG_QUALITY = 80
 timelapse = False
 timelapse_database = None
 p_timelapse = None
+percentage_completed = 0
+starttime = 0
 
 preferences_fail_alert = []
 preferences_success_alert = False
@@ -222,13 +225,15 @@ def timelapse_view(request):
             'timelapse' : timelapse,
             'timelapseInterval' : str(app_settings.timelapse_interval),
             'timelapseTime' : str(app_settings.timelapse_time),
-            'timelapseDatabase' : timelapsedb
+            'timelapseDatabase' : timelapsedb,
+            'percentage_completed' : percentage_completed
             }
 
 # View for the timelapse start - no site will be generated
 @view_config(route_name='timelapse_start')
 def timelapse_start_view(request):
     global timelapse
+    app_settings = DBSession.query(Settings).first()
     timelapse = True
     filename = strftime("%Y-%m-%d_%H-%M-%S", localtime())
     t = threading.Thread(target=take_timelapse, args=(filename, ))
@@ -247,12 +252,17 @@ def timelapse_stop_view(request):
 # View to take a photo - no site will be generated
 @view_config(route_name='photo')
 def photo_view(request):
+    # Make sure the directories exist
+    make_sure_path_exists(RASPISTILL_DIRECTORY)
+    make_sure_path_exists(THUMBNAIL_DIRECTORY)
+    
     if timelapse:
         return HTTPFound(location='/') 
     else:
         app_settings = DBSession.query(Settings).first()
         basename = strftime("IMG_%Y-%m-%d_%H-%M-%S", localtime())
         filename = basename + '.' + app_settings.encoding_mode
+        #filename = picture.jpg
         take_photo(filename)
         
         #f = open(RASPISTILL_DIRECTORY + filename,'rb')
@@ -266,11 +276,25 @@ def photo_view(request):
         filedata['encoding_mode'] = app_settings.encoding_mode
         filedata['ISO'] = str(app_settings.image_ISO)
         #filedata['exposure_time'] = app_settings.exposure_time
+        
         im = Image.open(RASPISTILL_DIRECTORY + filename)
         width, height = im.size
         filedata['resolution'] = str(width) + ' x ' + str(height)
+        #300, 168 = im.size
+        #filedata['resolution'] = '300 x 168'
+        
+        #### Test: convert the format to RGB if we have jpg or gif format fromat ####
+        #if (app_settings.encoding_mode == 'gif' ):
+            #im = im.convert("RGB")
         im.thumbnail(THUMBNAIL_SIZE)
-        im.save(THUMBNAIL_DIRECTORY + basename + '.jpg', 'JPEG', quality=THUMBNAIL_JPEG_QUALITY, optimize=True, progressive=True)
+        #im.save(THUMBNAIL_DIRECTORY + basename + '.' + app_settings.encoding_mode)
+        #### Try to to fill the transparent bit if the format doesn't do this ####
+        #if im.mode in ('RGBA', 'LA'):
+            #background = Image.new(im.mode[:-1], im.size)
+            #background.paste(im, im.split()[-1])
+            #im = background
+        im.save(THUMBNAIL_DIRECTORY + basename + '.' + app_settings.encoding_mode, quality=THUMBNAIL_JPEG_QUALITY, optimize=True, progressive=True)
+        #im.convert('RGB').save(THUMBNAIL_DIRECTORY + basename + '.jpg', 'JPEG', quality=THUMBNAIL_JPEG_QUALITY, optimize=True, progressive=True)
         '''
         imagedata = dict()
         imagedata['filename'] = filename
@@ -308,8 +332,10 @@ def pic_delete_view(request):
     p_id = request.params['id']
     pic = DBSession.query(Picture).filter_by(id=int(p_id)).first()
     print('Deleting picture and thumbnail...')
-    os.remove(RASPISTILL_DIRECTORY + '/' + pic.filename)
-    os.remove(THUMBNAIL_DIRECTORY + '/' + pic.filename)
+    # Delete on server in case if the image exists there
+    if os.path.exists(RASPISTILL_DIRECTORY + '/' + pic.filename) and os.path.exists(THUMBNAIL_DIRECTORY + '/' + pic.filename):
+        os.remove(RASPISTILL_DIRECTORY + '/' + pic.filename)
+        os.remove(THUMBNAIL_DIRECTORY + '/' + pic.filename)
     DBSession.delete(pic)
     return HTTPFound(location='/archive')
 
@@ -319,8 +345,10 @@ def tl_delete_view(request):
     t_id = request.params['id']
     tl = DBSession.query(Timelapse).filter_by(id=int(t_id)).first()
     print 'Deleting time-lapse directory and archive...'
-    shutil.rmtree(TIMELAPSE_DIRECTORY + tl.filename)
-    os.remove(TIMELAPSE_DIRECTORY + tl.filename + '.zip')
+    # Delete on server in case if the directory and the archive exist there
+    if os.path.exists(TIMELAPSE_DIRECTORY + tl.filename) and os.path.exists(TIMELAPSE_DIRECTORY + tl.filename + '.zip'):
+        shutil.rmtree(TIMELAPSE_DIRECTORY + tl.filename)
+        os.remove(TIMELAPSE_DIRECTORY + tl.filename + '.zip')
     #os.remove(TIMELAPSE_DIRECTORY + timelapse_database[int(request.params['id'])]['filename'] + '.tar.gz')
     #shutil.rmtree(TIMELAPSE_DIRECTORY + timelapse_database[int(request.params['id'])]['filename'])
     DBSession.delete(tl)
@@ -500,7 +528,7 @@ def take_photo(filename):
         resource = etree.Element('image', name=filename)
         etree.SubElement(resource, 'tag', name="experiment", value="Phenotiki")
         etree.SubElement(resource, 'tag', name="timestamp", value=os.path.splitext(filename)[0])
-        bqsession = setbasicauth(bisque_root_url, bisque_user, bisque_pswd)
+        bqsession = setbasicauth(app_settings.bisque_root_url, app_settings.bisque_user, app_settings.bisque_pswd)
         print 'Uploading \'' + filename + '\' to Bisque...'
         start_time = time()
         r = save_blob(bqsession, localfile=RASPISTILL_DIRECTORY+filename, resource=resource)
@@ -519,7 +547,7 @@ def take_photo(filename):
     return
 
 def take_timelapse(filename):
-    global timelapse, timelapse_database, p_timelapse
+    global timelapse, timelapse_database, p_timelapse, starttime, percentage_completed
 
     app_settings = DBSession.query(Settings).first()
     timelapsedata = {'filename' :  filename}
@@ -551,6 +579,12 @@ def take_timelapse(filename):
     
     try:
         print 'Starting time-lapse acquisition...'
+        
+        # For 'time lapse in progress' bar
+        starttime = time()
+        d = threading.Thread(target=percentage)
+        d.start()
+        
         #TODO: rename images with timestamp
         p_timelapse = Popen(
             ['raspistill '
@@ -614,7 +648,7 @@ def take_timelapse(filename):
     print 'done'
     #timelapse_database = timelapse_data
     timelapse = False
-    
+    percentage_completed = 0   
     return 
 
 #def generate_thumbnail(filename):
@@ -680,3 +714,22 @@ def get_timelapse_data(timelapse_rec):
     timelapse_data['resolution'] = timelapse_rec.resolution
     timelapse_data['encoding_mode'] = timelapse_rec.encoding_mode
     return timelapse_data
+
+def make_sure_path_exists(path):
+    try: 
+        os.makedirs(path)
+    except OSError:
+        if not os.path.isdir(path):
+            raise
+        
+# For 'time lapse in progress' bar
+def percentage():
+    global timelapse, starttime, percentage_completed
+    app_settings = DBSession.query(Settings).first()
+    while(timelapse and percentage_completed < 100):
+        currenttime=time()
+        percentage_completed = int((currenttime - starttime) * 100 // app_settings.timelapse_time)
+        if (percentage_completed > 100):
+            percentage_completed = 100
+        sleep(1)
+    return percentage_completed
