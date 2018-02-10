@@ -17,6 +17,7 @@
 from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response, FileResponse
+from httplib2 import ServerNotFoundError
 #import exifread
 import os
 import shutil
@@ -25,10 +26,17 @@ import threading
 import tarfile
 import zipfile
 import fileinput
+import gdrive_helper as G
+import multisensors as ms
+
 from subprocess import call, Popen, PIPE 
 from time import gmtime, strftime, localtime, asctime, mktime, sleep
 from stat import *
 from datetime import *
+from glob import glob
+from sys import stderr
+
+
 
 
 
@@ -42,9 +50,6 @@ from lxml import etree
 #from time import time
 from socket import gethostname
 #import picamera
-
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
 
 from sqlalchemy.exc import DBAPIError
 import transaction
@@ -63,7 +68,7 @@ RASPISTILL_ROOT = 'raspistillweb'
 RASPISTILL_DIRECTORY = 'raspistillweb/pictures/' # Example: /home/pi/pics/
 THUMBNAIL_DIRECTORY = 'raspistillweb/thumbnails/' # Example: /home/pi/thumbs/
 TIMELAPSE_DIRECTORY = 'raspistillweb/time-lapse/' # Example: /home/pi/timelapse/
-TIMESTAMP = '%Y-%m-%d_%H-%M-%S'
+TIMESTAMP = '%Y-%m-%d_%H-%M'
 
 IMAGE_EFFECTS = [
     'none', 'negative', 'solarise', 'sketch', 'denoise', 'emboss', 'oilpaint', 
@@ -94,6 +99,8 @@ IMAGE_RESOLUTIONS = [
 ENCODING_MODES = [
     'jpg', 'png', 'bmp', 'gif'
     ]
+
+MIME_TYPES={ 'jpg':'image/jpeg', 'png':'image/png', 'bmp':'image/bmp', 'gif':'image/gif'}
 
 #TODO: check version of camera (v1 or v2)
 IMAGE_HEIGHT_ALERT = 'Please enter an image height value between 0 and 2464 (or 1944 for the v1 camera).'
@@ -154,6 +161,12 @@ def settings_view(request):
     
     host_name = gethostname()
     
+    ips,macs = ms.get_clients()
+    clients = []
+    
+    for ip,mac in zip (ips,macs):
+        clients.append({'ip':ip,'mac':mac})
+    
     return {'project' : 'raspistillWeb',
             'hostName' : host_name,
             'image_effects' : IMAGE_EFFECTS,
@@ -181,14 +194,19 @@ def settings_view(request):
             'gdrive_folder' : str(app_settings.gdrive_folder),
             'gdrive_user' : str(app_settings.gdrive_user),
             'gdrive_secret' : str(app_settings.gdrive_secret),
+            'gdrive_file_delete' : str(app_settings.gdrive_delete_files),
             'preferences_fail_alert' : preferences_fail_alert_temp,
             'preferences_success_alert' : preferences_success_alert_temp,
             'number_images' :  str(app_settings.number_images),
             'command_before_shot': str(app_settings.command_before_shot),
             'command_after_shot': str(app_settings.command_after_shot),
             'command_before_sequence': str(app_settings.command_before_sequence),
-            'command_after_sequence': str(app_settings.command_after_sequence)
+            'command_after_sequence': str(app_settings.command_after_sequence),
+            'multisensor_enabled': str(app_settings.multisensor_enabled) if (app_settings.multisensor_enabled is not None) else 'No',
+            'sensors_name': app_settings.sensors_name if (app_settings.sensors_name is not None) or (app_settings.sensors_name=='') else ms.get_default_clients_name() ,
+            'clients':clients
             } 
+
 
 # View for the /archive site
 @view_config(route_name='archive', renderer='archive.mako')
@@ -196,8 +214,17 @@ def archive_view(request):
 
     pictures = DBSession.query(Picture).all()
     picturedb = []
+    
+    app_settings = DBSession.query(Settings).first()
+    
+    try:
+        file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
+        file_list = [f['title'] for f in file_list]
+    except ServerNotFoundError:
+        file_list = None
+            
     for picture in pictures:
-        imagedata = get_picture_data(picture)
+        imagedata = get_picture_data(picture,file_list)
         picturedb.insert(0,imagedata)
     return {'project' : 'raspistillWeb',
             'database' : picturedb
@@ -271,19 +298,8 @@ def timelapse_upload_gdrive_view(request):
     app_settings = DBSession.query(Settings).first()
     t_id = request.params['id']
     tl = DBSession.query(Timelapse).filter_by(id=int(t_id)).first()
-    gauth = GoogleAuth()
-    gauth.LocalWebserverAuth()
-    drive = GoogleDrive(gauth)
-    file_list = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
-    for upload_folder in file_list:
-        if upload_folder['title'] == app_settings.gdrive_folder:
-            upload_folder_id = upload_folder['id']
-    upfile = drive.CreateFile({'title': tl.filename, 'mimeType':'application/zip',
-                                   "parents": [{"kind": "drive#fileLink", "id": upload_folder_id}]})
-    upfile.SetContentFile(TIMELAPSE_DIRECTORY + tl.filename + '.zip')
-    upfile.Upload()
-
     
+    G.upload_file(TIMELAPSE_DIRECTORY + tl.filename + '.zip','application/zip',app_settings)
 
     return HTTPFound(location='/timelapse')
 
@@ -314,7 +330,8 @@ def photo_view(request,ret=False):
         width, height = im.size
         filedata['resolution'] = str(width) + ' x ' + str(height)
         im.thumbnail(THUMBNAIL_SIZE);
-	im.mode='RGB'
+        im.mode='RGB'
+        
         im.save(THUMBNAIL_DIRECTORY + basename + '.' + app_settings.encoding_mode, quality=THUMBNAIL_JPEG_QUALITY, optimize=True, progressive=True)
         '''
         imagedata = dict()
@@ -359,8 +376,18 @@ def pic_delete_view(request):
     pic = DBSession.query(Picture).filter_by(id=int(p_id)).first()
     print('Deleting picture and thumbnail...')
     
+    app_settings = DBSession.query(Settings).first()
+    
+    delete_gdrive = app_settings.gdrive_enabled.lower() == app_settings.gdrive_delete_files.lower() == 'yes'
+    
     if os.path.isfile(RASPISTILL_DIRECTORY + pic.filename):
-        os.remove(RASPISTILL_DIRECTORY + pic.filename)
+        lst = glob(RASPISTILL_DIRECTORY + pic.filename.replace('.png','.*.png'));
+        lst.append(RASPISTILL_DIRECTORY + pic.filename)
+        
+        for l in lst:
+            if (delete_gdrive):
+                G.delete_file(app_settings.gdrive_folder,l)    
+            os.remove(l)
     
     if os.path.isfile(THUMBNAIL_DIRECTORY + pic.filename):
         os.remove(THUMBNAIL_DIRECTORY + pic.filename)
@@ -371,7 +398,7 @@ def pic_delete_view(request):
 # View for the timelapse delete - no site will be generated
 @view_config(route_name='delete_timelapse')
 def tl_delete_view(request):
-    t_id = request.params['id']
+    tt_id = request.params['id']
     tl = DBSession.query(Timelapse).filter_by(id=int(t_id)).first()
     print 'Deleting time-lapse directory and archive...'
     try:
@@ -414,11 +441,14 @@ def save_view(request):
     gdrive_folder_temp = request.params['gdriveFolder']
     gdrive_user_temp = request.params['gdriveUser']
     gdrive_secret_temp = request.params['gdriveSecret']
+    gdrive_delete_files_temp = request.params['gdriveDelete']
     number_shots_temp = request.params['numberImages']
     command_before_sequence_temp = request.params['commandBeforeAcquisition']
     command_after_sequence_temp = request.params['commandAfterAcquisition']
     command_before_shot_temp = request.params['commandBeforeShot']
     command_after_shot_temp = request.params['commandAfterShot']
+    multisensors_enabled_temp = request.params['multisensorEnabled']
+    sensors_name = request.params['sensors_name'] if request.params['sensors_name'] !='None' else ''
 
     
 
@@ -530,38 +560,44 @@ def save_view(request):
             preferences_fail_alert.append(GDRIVE_SECRET_ALERT)
                 
         if gmail_enabled:
+            try:
+                G.gdrive_init(app_settings.gdrive_folder,gdrive_user_temp,gdrive_secret_temp,RASPISTILL_ROOT+'/settings.template.yaml')
+            except ServerNotFoundError:
+                preferences_fail_alert.append('Unable to authenticate G-Drive account. Check your internet connection')
+    
+    app_settings.gdrive_delete_files = gdrive_delete_files_temp
+     
 
-            with open(RASPISTILL_ROOT+'/settings.template.yaml', 'r') as gdrive_setting_file:
-                gdrive_settings_data = gdrive_setting_file.read()
-
-            gdrive_settings_data = gdrive_settings_data.replace('clienttext', gdrive_user_temp)
-            gdrive_settings_data = gdrive_settings_data.replace('secrettext', gdrive_secret_temp)
-                            
-            with open('settings.yaml', 'w') as gdrive_setting_file:
-                gdrive_setting_file.write(gdrive_settings_data)
-
-            gauth = GoogleAuth()
-            gauth.LocalWebserverAuth()
-            drive = GoogleDrive(gauth)
-            folder_list = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
-            new_folder_data = {'title' : app_settings.gdrive_folder, 'mimeType' : 'application/vnd.google-apps.folder'}
-            upload_folder_exists = 0
-            for upload_folder in folder_list:
-                if upload_folder['title'] == app_settings.gdrive_folder:
-                    upload_folder_id = upload_folder['id']
-                    upload_folder_exists = 1
-            if upload_folder_exists == 0:
-                #new_folder_data = {'title' : app_settings.gdrive_folder, 'mimeType' : 'application/vnd.google-apps.folder'}
-                new_folder = drive.CreateFile(new_folder_data)
-                new_folder.Upload()
-                upload_folder_id = new_folder['id']
-
+    if multisensors_enabled_temp:
+        app_settings.multisensor_enabled = multisensors_enabled_temp
+        
+    app_settings.sensors_name = sensors_name
                 
     if preferences_fail_alert == []:
         preferences_success_alert = True 
     
     DBSession.flush()      
     return HTTPFound(location='/settings')  
+
+@view_config(route_name='upload_gdrive')
+def upload_gdrive_view(request):
+    tt_id = request.params['id']
+    picture = DBSession.query(Picture).filter_by(id=int(tt_id)).first()
+    imagedata = get_picture_data(picture)
+    
+    app_settings = DBSession.query(Settings).first()
+    
+    for client in imagedata['slaves']:
+        if client['gdrive'].lower() == 'no':
+            fullpath = os.path.join(RASPISTILL_DIRECTORY,client['filename'])
+            G.upload_file(fullpath,MIME_TYPES[app_settings.encoding_mode],app_settings)
+            
+    print request
+    return HTTPFound(location='/') 
+    
+    
+    
+    
 
 # View for the reboot
 @view_config(route_name='reboot', renderer='shutdown.mako')
@@ -595,15 +631,37 @@ def external_photo_view(request):
 ############ Helper functions to keep the code clean ##########################
 ###############################################################################
 
-
-def take_photo(filename,bypassUploads=False):
-    app_settings = DBSession.query(Settings).first()
-    
+def raspistill_commandline(filename=None,app_settings=None):
+    if (app_settings is None):
+        app_settings = DBSession.query(Settings).first()
+        
     if app_settings.image_ISO == 'auto':
         iso_call = ''
     else:
         iso_call = ' -ISO ' + str(app_settings.image_ISO)
-    
+        
+    if (filename is None):
+        out = ''
+    else:
+        out = ' -o ' + RASPISTILL_DIRECTORY + filename
+        
+    command = ['raspistill -t 500'
+                + ' -n '
+                + ' -w ' + str(app_settings.image_width)
+                + ' -h ' + str(app_settings.image_height)
+                + ' -e ' + app_settings.encoding_mode
+                + ' -ex ' + app_settings.exposure_mode
+                + ' -awb ' + app_settings.awb_mode
+                + ' -rot ' + str(app_settings.image_rotation)
+                + ' -ifx ' + app_settings.image_effect
+                + iso_call
+                + out ]
+        
+    return command
+
+def take_photo(filename,bypassUploads=False):
+    app_settings = DBSession.query(Settings).first()
+
     # ----- TEST CODE -----#
     #print PiCamera.AWB_MODES
     #with picamera.PiCamera() as camera:
@@ -619,22 +677,19 @@ def take_photo(filename,bypassUploads=False):
     #    camera.capture(RASPISTILL_DIRECTORY + filename + '_test', format=app_settings.encoding_mode)
     # ----- TEST CODE -----#
     
-    run_shell_command(app_settings.command_before_sequence)
+    raspistill_command = raspistill_commandline(filename,app_settings)
+    raspistill_command_no_out = raspistill_commandline(None,app_settings)
     
-    call (
-        ['raspistill -t 500'
-        + ' -n '
-        + ' -w ' + str(app_settings.image_width)
-        + ' -h ' + str(app_settings.image_height)
-        + ' -e ' + app_settings.encoding_mode
-        + ' -ex ' + app_settings.exposure_mode
-        + ' -awb ' + app_settings.awb_mode
-        + ' -rot ' + str(app_settings.image_rotation)
-        + ' -ifx ' + app_settings.image_effect
-        + iso_call
-        + ' -o ' + RASPISTILL_DIRECTORY + filename],
-        stdout=PIPE, shell=True
-        )
+    r = app_settings.command_before_sequence
+    r = r.replace('$f',filename)
+    r = r.replace('$c',raspistill_command_no_out[0])
+    run_shell_command(r)
+    
+    call (raspistill_command,stdout=PIPE, shell=True)
+    
+    if (app_settings.multisensor_enabled == "Yes"):
+        fullpath = os.path.join(RASPISTILL_DIRECTORY,filename)   
+        ms.trigger_pictures_from_clients(raspistill_command_no_out[0],fullpath)
     
     run_shell_command(app_settings.command_after_sequence)
     
@@ -663,21 +718,13 @@ def take_photo(filename,bypassUploads=False):
             print 'Image URI:', r.get('uri')
 
     if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
-        gauth = GoogleAuth()
-        gauth.LocalWebserverAuth()
-        drive = GoogleDrive(gauth)
-        file_list = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
-        for upload_folder in file_list:
-            if upload_folder['title'] == app_settings.gdrive_folder:
-                upload_folder_id = upload_folder['id']
-        upfile = drive.CreateFile({'title': filename, 'mimeType':'image/png',
-                                   "parents": [{"kind": "drive#fileLink", "id": upload_folder_id}]})
-        upfile.SetContentFile(RASPISTILL_DIRECTORY +filename)
-        upfile.Upload()
+        lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
+        lst.append(RASPISTILL_DIRECTORY + filename)
+        
+        for p in lst:
+            G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
         
 
-    #call(['cp raspistillweb/pictures/preview.jpg raspistillweb/pictures/'+filename],shell=True)
-    #generate_thumbnail(filename)
     return
 
 def take_timelapse(filename):
@@ -814,8 +861,22 @@ def setbasicauth(bisquehost, username, password):
     r = bqsession.c.post(bisquehost + "/auth_service/setbasicauth", data = { 'username': username, 'passwd': password})
     print r
     return bqsession
+    
+    
+def get_clients_file_list(filename,encoding_mode):
+     return glob(filename.replace('.'+encoding_mode,'.*.'+encoding_mode));
 
-def get_picture_data(picture):
+def get_picture_data(picture,file_list=[]):
+    app_settings = DBSession.query(Settings).first()
+    
+    if ( (file_list is not None) and (len(file_list)==0)):
+        if (app_settings.gdrive_enabled == 'Yes'):
+            try:
+                file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
+                file_list = [f['title'] for f in file_list]
+            except ServerNotFoundError:
+                file_list=None
+        
     imagedata = dict()
     imagedata['id'] = str(picture.id)
     imagedata['filename'] = picture.filename
@@ -829,9 +890,41 @@ def get_picture_data(picture):
     imagedata['date'] = str(picture.date)
     imagedata['timestamp'] = str(picture.timestamp)
     imagedata['filesize'] = str(picture.filesize)
+    
+
+    imagedata['slaves'] = None
+    
+    lst = get_clients_file_list(RASPISTILL_DIRECTORY + picture.filename,imagedata['encoding_mode']);
+    slaves = []
+    
+    for l in lst:
+        a = l.find('.')
+        b = l.rfind('.');
+        slaves.append(l[a+1:b])
+        
+
+    imagedata['slaves'] = [{'filename':picture.filename,'sensor_name':'Server','gdrive':None}] + [{'filename':picture.filename.replace('.'+picture.encoding_mode,'.'+s+'.'+picture.encoding_mode),'sensor_name':ms.map_client_name(s,app_settings.sensors_name),'gdrive':None} for s in slaves]
+    
+    show_upload_button = False
+    
+    if (app_settings.gdrive_enabled == 'Yes'):
+        
+        for j in range(len(imagedata['slaves'])):
+            title,_ = os.path.splitext(imagedata['slaves'][j]['filename'])
+            if (file_list is not None):
+                imagedata['slaves'][j]['gdrive'] = 'Yes' if title in file_list else 'No'
+            else:
+                imagedata['slaves'][j]['gdrive'] = 'Unk' #unknown due to internet connect
+            
+            if (imagedata['slaves'][j]['gdrive'] == 'No'):
+                show_upload_button = True
+    
+    imagedata['gdrive_upload'] = show_upload_button
+        
     return imagedata
 
 def run_shell_command(command=""):
+    print ">>> "+command
     if command:
         p_command = Popen(command,shell=True,stdout=PIPE)
         p_command.wait()

@@ -34,14 +34,14 @@
           <h3 class="panel-title">Preferences</h3>
         </div>
         <div class="panel-body">
-      	  <form action="save" method="POST" class="form-horizontal" role="form">
-      	    <div class="form-group">
-      	      <label class="col-lg-2 control-label">Device Name</label>
+          <form action="save" method="POST" class="form-horizontal" role="form">
+            <div class="form-group">
+              <label class="col-lg-2 control-label">Device Name</label>
               <div class="col-lg-10">
-      	        <input type="text" class="form-control" placeholder="${hostName}" title="Name used to identify this Phenotiki device in a network." readonly>
-      	      </div>
-      	    </div>
-      	    
+                <input type="text" class="form-control" placeholder="${hostName}" title="Name used to identify this Phenotiki device in a network." readonly>
+              </div>
+            </div>
+            
             <span class="help-block">Image preferences:</span>
             
             <div class="form-group">
@@ -209,7 +209,7 @@
             
             <span class="help-block">Timelapse preferences:</span>
             
-      	    <div class="form-group">
+            <div class="form-group">
               <label for="TimelapseInterval1" class="col-lg-2 control-label">Interval</label>
               <div class="col-lg-10">
                 <div class="input-group">
@@ -220,7 +220,7 @@
               </div>
             </div>
             
-      	    <div class="form-group">
+            <div class="form-group">
               <label for="TimelapseTime1" class="col-lg-2 control-label">Event Duration</label>
               <div class="col-lg-10">
                 <div class="input-group">
@@ -282,7 +282,7 @@
               </div>  
             </div>
 
-	    <span class="help-block"><h4>Google Drive preferences:</h4></span>
+        <span class="help-block"><h4>Google Drive preferences:</h4></span>
             
             <div class="form-group">
               <label for="gdriveEnabled1" class="col-lg-2 control-label">Gdrive Upload</label>
@@ -299,8 +299,8 @@
             </div>
         
        <span class="help-block">Go to <a href="http://console.developers.google.com" target="_blank">Google Developer Console</a> to get your Client ID and Secret Token.</span>
-	   
-	   <div class="form-group">
+       
+       <div class="form-group">
               <label for="GdriveFolder1" class="col-lg-2 control-label">Google Drive Upload Folder</label>
               <div class="col-lg-10">
                 <input type="text" class="form-control" id="GdriveFolder1" name="gdriveFolder" value="${gdrive_folder}">
@@ -320,11 +320,57 @@
                 <input type="text" class="form-control" id="GdriveSecret1" name="gdriveSecret" value="${gdrive_secret}">
               </div>
             </div>
-
-
-
-
-
+            
+            <div class="form-group">
+              <label for="BisqueEnabled1" class="col-lg-2 control-label">Delete files</label>
+              <div class="col-lg-10">
+                <div class="btn-group" data-toggle="buttons">
+                  <label class="btn btn-default ${'active' if gdrive_file_delete == 'Yes' else ''}" title="Delete files in GDrive.">
+                    <input type="radio" name="gdriveDelete" value="Yes" ${'checked' if gdrive_file_delete == 'Yes' else ''}> Yes
+                  </label>
+                  <label class="btn btn-default ${'active' if gdrive_file_delete == 'No' else ''}" title="Keep always GDrive files.">
+                    <input type="radio" name="gdriveDelete" value="No" ${'checked' if gdrive_file_delete == 'No' else ''}> No
+                  </label>
+                </div>
+              </div>  
+            </div>
+            <span class="help-block">Delete files in G-Drive when they are deleted locally.</span>
+            
+            <span class="help-block"><h4>Multisensor trigger:</h4></span>
+            
+            <div class="form-group">
+              <label for="multisensor" class="col-lg-2 control-label">Multisensor</label>
+              <div class="col-lg-10">
+                <div class="btn-group" data-toggle="buttons">
+                  <label class="btn btn-default ${'active' if multisensor_enabled == 'Yes' else ''}" title="Tiggers multiple Phenotiki sensors at the same time.">
+                    <input type="radio" name="multisensorEnabled" value="Yes" ${'checked' if multisensor_enabled == 'Yes' else ''}> Enabled
+                  </label>
+                  <label class="btn btn-default ${'active' if multisensor_enabled == 'No' else ''}" title="Tiggers multiple Phenotiki sensors at the same time.">
+                    <input type="radio" name="multisensorEnabled" value="No" ${'checked' if multisensor_enabled == 'No' else ''}> Disabled
+                  </label>
+                </div>
+              </div>  
+            </div>
+            
+            
+            <div class="form-group">
+              <label for="GdriveSecret1" class="col-lg-2 control-label">Sensors name:</label>
+              <div class="col-lg-10">
+                <textarea rows="5" cols="50" class="form-control" id="sensors_name" name="sensors_name">${sensors_name}</textarea>
+              </div>
+            </div>           
+            
+            <div class="form-group">
+                % if len(clients)>0:
+                <span class="help-block col-lg-2">Connected Clients:</span>
+                <ul class="col-lg-10">
+                    % for c in clients:
+                        <li>${c['ip']} &dash; ${c['mac']}</li>
+                    % endfor
+                </ul>
+                % endif
+            </div>
+            
             <div class="form-group">
               <div class="col-lg-offset-2 col-lg-10">
                 <button type="submit" formmethod="POST" class="btn btn-primary">Save</button>

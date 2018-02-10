@@ -50,5 +50,6 @@ def main(global_config, **settings):
     config.add_route('reboot','/reboot')
     config.add_route('shutdown','/shutdown')
     config.add_route('external_photo','/external_photo')
+    config.add_route('upload_gdrive','/upload_gdrive')
     config.scan()
     return config.make_wsgi_app()

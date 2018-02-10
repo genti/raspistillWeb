@@ -45,6 +45,20 @@
             <dd>${imagedata['image_effect']}</dd>
             <dt>AWB Mode</dt>
             <dd>${imagedata['awb_mode']}</dd>
+            
+            % if imagedata['slaves']:
+            <dt>Images</dt>
+            <dd>
+            % for s in imagedata['slaves']:
+                % if s['gdrive'] is not None:
+                <img src='${request.static_url('raspistillweb:static/images')}/gdrive_${s['gdrive'].lower()}.png' title='GDrive Status' alt='GDrive Status'>
+                % endif
+                <a href="${request.static_url('raspistillweb:pictures/')}${s['filename']}">${s['sensor_name']}</a>&nbsp;&nbsp;
+            % endfor
+            </dd>
+            % endif
+            
+            
           </dl>
         </div>
       </div>

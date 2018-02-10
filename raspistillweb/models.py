@@ -54,11 +54,14 @@ class Settings(Base):
     gdrive_folder = Column(Text)
     gdrive_user = Column(Text)
     gdrive_secret = Column(Text)
+    gdrive_delete_files = Column(Text, default='Yes')
     number_images = Column(Integer)
     command_before_sequence = Column(Text)
     command_after_sequence = Column(Text)
     command_before_shot = Column(Text)
     command_after_shot = Column(Text)
+    multisensor_enabled = Column(Text,default='No')
+    sensors_name = Column(Text)
 
 class Timelapse(Base):
     __tablename__ = 'timelapse'

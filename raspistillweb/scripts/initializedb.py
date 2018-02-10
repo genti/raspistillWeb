@@ -76,7 +76,8 @@ def main(argv=sys.argv):
                         command_before_sequence = '',
                         command_after_sequence = '',
                         command_before_shot = '',
-                        command_after_shot = ''
+                        command_after_shot = '',
+                        multisensor_enabled = 'No'
                         )
         DBSession.add(app_settings)
 

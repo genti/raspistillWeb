@@ -21,6 +21,21 @@
             <dd>${file['resolution']}</dd>
             <dt>Filesize</dt>
             <dd>${file['filesize']}</dd>
+            <dt>Images</dt>
+            <dd>
+            % for s in file['slaves']:
+                % if s['gdrive'] is not None:
+                <img src='${request.static_url('raspistillweb:static/images')}/gdrive_${s['gdrive'].lower()}.png' title='GDrive Status' alt='GDrive Status'>
+                % endif
+                <a href="${request.static_url('raspistillweb:pictures/')}${s['filename']}">${s['sensor_name']}</a>&nbsp;&nbsp;
+            % endfor
+            </dd>
+            
+            % if file['gdrive_upload']:
+            <form action="upload_gdrive" method="POST">
+                <button type="submit" name="id" value="${file['id']}" class="btn btn-info">&uarr;Upload</button>
+            </form>
+            % endif
           </dl>
         </div>
       </div>     
