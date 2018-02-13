@@ -3,6 +3,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    BLOB
     )
 
 from sqlalchemy.ext.declarative import declarative_base
@@ -75,5 +76,14 @@ class Timelapse(Base):
     n_images = Column(Integer)
     resolution = Column(Text)
     encoding_mode = Column(Text)
+    
+class CameraParams(Base):
+    __tablename__ = 'camera_params'
+    id = Column(Integer, primary_key=True)
+    device = Column(Text)
+    timestamp = Column(Text)
+    params = Column(BLOB)
+    
+    
 
 Index('my_index', Picture.filename, unique=True, mysql_length=255)

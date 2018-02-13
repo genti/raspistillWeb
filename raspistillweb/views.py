@@ -68,6 +68,7 @@ RASPISTILL_ROOT = 'raspistillweb'
 RASPISTILL_DIRECTORY = 'raspistillweb/pictures/' # Example: /home/pi/pics/
 THUMBNAIL_DIRECTORY = 'raspistillweb/thumbnails/' # Example: /home/pi/thumbs/
 TIMELAPSE_DIRECTORY = 'raspistillweb/time-lapse/' # Example: /home/pi/timelapse/
+CAMERA_CALIBR_DIRECTORY = 'raspistillweb/camera-calibr'
 TIMESTAMP = '%Y-%m-%d_%H-%M'
 
 IMAGE_EFFECTS = [
@@ -102,6 +103,13 @@ ENCODING_MODES = [
 
 MIME_TYPES={ 'jpg':'image/jpeg', 'png':'image/png', 'bmp':'image/bmp', 'gif':'image/gif'}
 
+
+CALIBR_DEF_NUMBER_IMAGES = 12
+CALIBR_DEF_INTERVAL = 3
+CALIBR_DEF_CHECKER_VERTICAL = 11
+CALIBR_DEF_CHECKER_HORIZONTAL = 7
+
+
 #TODO: check version of camera (v1 or v2)
 IMAGE_HEIGHT_ALERT = 'Please enter an image height value between 0 and 2464 (or 1944 for the v1 camera).'
 IMAGE_WIDTH_ALERT = 'Please enter an image width value between 0 and 3280 (or 2592 for the v1 camera).'
@@ -124,6 +132,8 @@ THUMBNAIL_SIZE = 240, 160
 THUMBNAIL_JPEG_QUALITY = 80
 
 timelapse = False
+
+
 timelapse_database = None
 p_timelapse = None
 
@@ -217,11 +227,11 @@ def archive_view(request):
     
     app_settings = DBSession.query(Settings).first()
     
-    try:
-        file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
-        file_list = [f['title'] for f in file_list]
-    except ServerNotFoundError:
-        file_list = None
+    #try:
+    #    file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
+    #    file_list = [f['title'] for f in file_list]
+    #except ServerNotFoundError:
+    file_list = None
             
     for picture in pictures:
         imagedata = get_picture_data(picture,file_list)
@@ -229,6 +239,7 @@ def archive_view(request):
     return {'project' : 'raspistillWeb',
             'database' : picturedb
             }
+            
 
 # View for the / site
 @view_config(route_name='home', renderer='home.mako')
@@ -595,8 +606,97 @@ def upload_gdrive_view(request):
     print request
     return HTTPFound(location='/') 
     
+
+@view_config(route_name='camera_calibr_do_pic')
+def camera_calibr_do_pic(request):
+    app_settings = DBSession.query(Settings).first()
+    
+    if not os.path.isdir(CAMERA_CALIBR_DIRECTORY):
+        os.mkdir(CAMERA_CALIBR_DIRECTORY)
     
     
+    if (not request.params['device']):
+        fname = 'calibr_master_{id}.'.format(id=request.params['count']) + app_settings.encoding_mode
+        filename = os.path.join(CAMERA_CALIBR_DIRECTORY,fname)
+        raspistill_command = raspistill_commandline(None,app_settings)
+        raspistill_command[0]+=' -o '+filename
+        
+        call (raspistill_command,stdout=PIPE, shell=True)
+    else:
+        ip = request.params['device'].replace('.','-')
+        fname = 'calibr_'+ip+'_{id}.'.format(id=request.params['count']) + app_settings.encoding_mode
+        raspistill_command = raspistill_commandline(None,app_settings)
+        
+    response = Response()
+    
+    return response
+
+def get_calibration_patterns():
+    lst = glob(os.path.join(CAMERA_CALIBR_DIRECTORY,'calibr*.*'));
+    data = {}
+    
+    for f in lst:
+        path,fname = os.path.split(f)
+        _,client,_ = fname.split('_')
+        
+        client = client.replace('-','.')
+
+        if (client not in data.keys()):
+            data[client] = []
+            
+        data[client].append(f)
+            
+    data[client].sort()
+        
+    return data
+ 
+#@view_config(route_name="camera_calibr_do_calibr",renderer='camera_calibr.mako')
+def do_camera_calibration(request):
+    import cv2
+    
+    action = request.params['action']
+    client = request.params['client']
+    
+    patterns = get_calibration_patterns()
+    
+    #if (action=='detect'):
+    #   img = patterns[client]
+        
+
+    
+   
+@view_config(route_name='camera_calibr',renderer='camera_calibr.mako')
+def camera_calibr(request):
+    app_settings = DBSession.query(Settings).first()
+    slaves = []
+    alerts = []
+    
+    try:
+        import cv2
+    except:
+        alerts.append('OpenCV2 not installed. Calibration cannot be performed. Please <a href="https://www.pyimagesearch.com/2015/02/23/install-opencv-and-python-on-your-raspberry-pi-2-and-b/" target="_blank">read this guide</a> on how to do it')
+        
+    
+    if (app_settings.multisensor_enabled.lower() == 'yes'):
+        clients = ms.get_registered_clients(app_settings.sensors_name)
+        
+        
+        for k in clients:
+            slaves.append({'ip':k,'name':clients[k]})
+            
+    calibration_images = get_calibration_patterns()
+    
+    return {
+        'project': 'raspistillWeb',
+        'slaves':slaves,
+        'number_images': CALIBR_DEF_NUMBER_IMAGES,
+        'interval' : CALIBR_DEF_INTERVAL,
+        'checker_horizontal' : CALIBR_DEF_CHECKER_HORIZONTAL,
+        'checker_vertical' : CALIBR_DEF_CHECKER_VERTICAL,
+        'preferences_fail_alert': alerts,
+        'calibration_images': calibration_images
+        
+    }
     
 
 # View for the reboot
@@ -717,12 +817,12 @@ def take_photo(filename,bypassUploads=False):
             print r.items()
             print 'Image URI:', r.get('uri')
 
-    if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
-        lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
-        lst.append(RASPISTILL_DIRECTORY + filename)
+    #if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
+    #    lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
+    #    lst.append(RASPISTILL_DIRECTORY + filename)
         
-        for p in lst:
-            G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
+    #    for p in lst:
+    #        G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
         
 
     return

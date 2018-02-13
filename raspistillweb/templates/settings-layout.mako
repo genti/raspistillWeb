@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${request.static_url('raspistillweb:static/css/bootstrap.css')}" rel="stylesheet" media="screen">
     <link href="${request.static_url('raspistillweb:static/css/bootstrap-responsive.css')}" rel="stylesheet">
+    
+    <script src="${request.static_url('raspistillweb:static/js/jquery.min.js')}"></script>
   </head>
   <body>
 
@@ -46,7 +48,7 @@
     
     ${next.body()} 
     
-    <script src="${request.static_url('raspistillweb:static/js/jquery.min.js')}"></script>
+    
     <script src="${request.static_url('raspistillweb:static/js/bootstrap.min.js')}"></script>
   
   </body>

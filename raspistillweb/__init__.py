@@ -51,5 +51,7 @@ def main(global_config, **settings):
     config.add_route('shutdown','/shutdown')
     config.add_route('external_photo','/external_photo')
     config.add_route('upload_gdrive','/upload_gdrive')
+    config.add_route('camera_calibr','/camera_calibr')
+    config.add_route('camera_calibr_do_pic','/camera_calibr_do_pic')
     config.scan()
     return config.make_wsgi_app()

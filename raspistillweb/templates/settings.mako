@@ -371,6 +371,11 @@
                 % endif
             </div>
             
+            <span class="help-block"><h4>Camera calibration:</h4></span>
+            <span class="help-block">Go to the <a href="/camera_calibr">Camera Calibration Tool</a>.</span>
+            
+            
+            
             <div class="form-group">
               <div class="col-lg-offset-2 col-lg-10">
                 <button type="submit" formmethod="POST" class="btn btn-primary">Save</button>

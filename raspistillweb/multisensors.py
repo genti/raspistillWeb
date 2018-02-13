@@ -86,8 +86,32 @@ def get_clients():
                 found_mac.append(m)
     
     return found_ip,mac
+ 
+def get_registered_clients(registered):
+    registered_clients = {  }
+    clients = {}
+    
+    lst = registered.split('\n')
+    
+    is_registered = lambda x : x in registered_clients.keys()
+    
+    for c in lst:
+        mac,name = c.split(',')
+        
+        registered_clients[str(mac)] = name
+        
+    ips,macs = get_clients()
+ 
+    
+    for mac,ip in zip(macs,ips):
+        if (is_registered(mac)):
+            clients[ip] = registered_clients[mac]
+            
+    return clients
     
     
+    
+
 def get_default_clients_name():
     _,macs = get_clients()
     

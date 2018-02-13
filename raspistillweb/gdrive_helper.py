@@ -38,7 +38,6 @@ def delete_file(folder_name,file_name):
     title,_ = path.splitext(file_name)
     
     for f in file_list:
-        print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'+ f['title'] 
         if f['title'] == title:
             f.Delete()
 
