@@ -16,10 +16,12 @@
 
 from pyramid.config import Configurator
 from sqlalchemy import engine_from_config
+import multisensors as ms
 
 from .models import (
     DBSession,
     Base,
+    Settings,
     )
 
 def main(global_config, **settings):
@@ -53,5 +55,11 @@ def main(global_config, **settings):
     config.add_route('upload_gdrive','/upload_gdrive')
     config.add_route('camera_calibr','/camera_calibr')
     config.add_route('camera_calibr_do_pic','/camera_calibr_do_pic')
+    config.add_route('camera_calibr_do_calibr','/camera_calibr_do_calibr')
+    config.add_route('camera_calibrated_action','/camera_calibrated_action')
     config.scan()
+    
+    app_settings = DBSession.query(Settings).first()
+    ms.init_thread(app_settings)
+    
     return config.make_wsgi_app()

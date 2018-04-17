@@ -352,6 +352,27 @@
               </div>  
             </div>
             
+            <div class="form-group">
+              <label for="asyncDownload" class="col-lg-2 control-label">Async download</label>
+              <div class="col-lg-10">
+                <div class="btn-group" data-toggle="buttons">
+                  <label class="btn btn-default ${'active' if async_download == 'Yes' else ''}" title="Asynchronous download of images from other devices">
+                    <input type="radio" name="asyncDownload" value="Yes" ${'checked' if async_download == 'Yes' else ''}> Yes
+                  </label>
+                  <label class="btn btn-default ${'active' if async_download == 'No' else ''}" title="Asynchronous download of images from other devices">
+                    <input type="radio" name="asyncDownload" value="No" ${'checked' if async_download == 'No' else ''}> No
+                  </label>
+                </div>
+              </div>  
+            </div>
+            
+            <script>
+                jQuery('input[name=asyncDownload][value=Yes]').change(function(){
+                    if (jQuery(this).is(':checked')){
+                        alert('By activating this option, a reboot is necessary');
+                    }
+                })
+            </script>
             
             <div class="form-group">
               <label for="GdriveSecret1" class="col-lg-2 control-label">Sensors name:</label>

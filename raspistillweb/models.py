@@ -62,6 +62,7 @@ class Settings(Base):
     command_before_shot = Column(Text)
     command_after_shot = Column(Text)
     multisensor_enabled = Column(Text,default='No')
+    multisensor_download_asynch = Column(Text,default='No')
     sensors_name = Column(Text)
 
 class Timelapse(Base):

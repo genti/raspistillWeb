@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${request.static_url('raspistillweb:static/css/bootstrap.css')}" rel="stylesheet" media="screen">
     <link href="${request.static_url('raspistillweb:static/css/bootstrap-responsive.css')}" rel="stylesheet">
+    <link href="${request.static_url('raspistillweb:static/css/customizations.css')}" rel="stylesheet">
+    <script src="${request.static_url('raspistillweb:static/js/jquery.min.js')}"></script>
   </head>
   <body>
 
@@ -34,6 +36,7 @@
             </li>
           </ul>
           <ul class="nav navbar-nav navbar-right">
+            <li><h3 class='async_download ${'hidden' if downloadInProgress == False else ''}'><span class='label label-info'>&#8681;</span></h3></li>
             <li>
               <form method="post">
                 <input type="button" class="btn btn-danger navbar-btn" value="Take Photo" onclick="location.href='/photo'">

@@ -118,14 +118,26 @@
                     <th>Actions</th>
                 </thead>
                 <tbody>
+                    
                     % for row in calibration_images:
+                    <%
+                        try:
+                            for i in range(len(calibration_images[row])):
+                                fname = calibration_images[row][i]
+                                if (fname in detected_checkerboards.keys()):
+                                    result = 'success' if detected_checkerboards[fname]==True else 'danger'
+                                    calibration_images[row][i] = "<span class='label label-%s'>%s</span>"%(result,fname)
+                            
+                        except:
+                            pass
+                    %>
                     <tr>
                         <td class="device-name">${row}</td>
-                        <td>${', '.join(calibration_images[row])}</td>
+                        <td>${', '.join(calibration_images[row]) | n }</td>
                         <td>
                             <button type="submit" name="action" class="btn btn-info calibr-btn" value="detect">Detect Boards</button>
                             <button type="submit" name="action" class="btn btn-success calibr-btn" value="calibr">Calibrate</button>
-                            <button type="submit" name="action" class="btn btn-danger calibr-btn" value="detect">Delete</button>
+                            <button type="submit" name="action" class="btn btn-danger calibr-btn" value="delete">Delete</button>
                         </td>
                     </tr>
                     % endfor
@@ -137,17 +149,78 @@
               <div class="col-md-4 col-lg-3 col-sm-4">
                 <div class="input-group">
                   <span class="input-group-addon"><span class="glyphicon glyphicon-resize-horizontal"></span></span>
-                  <input type="number" class="form-control" name="checkerHoriz" min="1" max="100" placeholder="${checker_horizontal}" title="Number of horizontal checkers">
+                  <input type="number" class="form-control" name="checkerHoriz" min="1" max="100" value="${checker_horizontal}" title="Number of horizontal checkers">
                 </div>
               </div>
               <div class="col-md-4 col-lg-3 col-sm-4">
                 <div class="input-group">
                   <span class="input-group-addon"><span class="glyphicon glyphicon-resize-vertical"></span></span>
-                  <input type="number" class="form-control" name="checkerVert" min="1" max="100" placeholder="${checker_vertical}" title="Number of vertical checkers">
+                  <input type="number" class="form-control" name="checkerVert" min="1" max="100" value="${checker_vertical}" title="Number of vertical checkers">
                 </div>                
               </div>
             </div>
             <input type="hidden" name="client" value="">
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  % endif
+  
+  
+  % if parameters:
+  <div class="row">
+    <div class="col-md-10 col-md-offset-1">
+      <div class="panel panel-default">
+        <div class="panel-heading">
+          <h3 class="panel-title">Calibrated cameras</h3>
+        </div>
+        
+        <div class="panel-body">
+          <form action="/camera_calibrated_action" method="POST" class="form-horizontal" role="form" id="calibrated_cameras">
+            <table class="table table-hover">
+                <thead>
+                    <th>Device</th>
+                    <th>Timestamp</th>
+                    <th>Actions</th>
+                </thead>
+                <tbody>
+                    
+                    % for c in parameters:
+
+                    <tr>
+                        <td class="device-name"><span class="calibration-id">${c.id}</span>&nbsp;${c.device}</td>
+                        <td>${c.timestamp}</td>
+                        <td>
+                            <button type="submit" name="action" class="btn btn-info calibr-btn" value="view">View</button>
+                            <button type="submit" name="action" class="btn btn-success calibr-btn" value="apply">Apply</button>
+                            <button type="submit" name="action" class="btn btn-danger calibr-btn" value="delete">Delete</button>
+                        </td>
+                    </tr>
+                    % endfor
+                </tbody>
+            </table>
+            
+            
+            <div class="form-group">
+              <label class="col-lg-2 control-label">Picture:</label>
+              <div class="col-lg-10">
+                <select name="pic_filename" class="form-control" id="pic_filename">
+                <option value="0">Select image to rectify...</option>
+                % for d in pic_filenames.keys():
+                <optgroup label="${d}">
+                    % for f in pic_filenames[d]:
+                        <option>${f}</option>
+                    % endfor
+                </optgroup>
+                % endfor
+                </select>
+              </div>
+            </div>
+          
+
+            <input type="hidden" name="id" value="">
           </form>
         </div>
       </div>

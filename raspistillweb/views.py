@@ -18,7 +18,8 @@ from pyramid.view import view_config
 from pyramid.httpexceptions import HTTPFound
 from pyramid.response import Response, FileResponse
 from httplib2 import ServerNotFoundError
-#import exifread
+from httplib import ResponseNotReady
+
 import os
 import shutil
 import signal
@@ -35,8 +36,6 @@ from stat import *
 from datetime import *
 from glob import glob
 from sys import stderr
-
-
 
 
 
@@ -58,8 +57,8 @@ from .models import (
     Picture,
     Settings,
     Timelapse,
+    CameraParams
     )
-
 
 # Modify these lines to change the directory where the pictures and thumbnails
 # are stored. Make sure that the directories exist and the user who runs this
@@ -106,8 +105,9 @@ MIME_TYPES={ 'jpg':'image/jpeg', 'png':'image/png', 'bmp':'image/bmp', 'gif':'im
 
 CALIBR_DEF_NUMBER_IMAGES = 12
 CALIBR_DEF_INTERVAL = 3
-CALIBR_DEF_CHECKER_VERTICAL = 11
-CALIBR_DEF_CHECKER_HORIZONTAL = 7
+CALIBR_DEF_CHECKER_VERTICAL = 13
+CALIBR_DEF_CHECKER_HORIZONTAL = 9
+CALIBR_DEF_RESIZE = (1024,768)
 
 
 #TODO: check version of camera (v1 or v2)
@@ -213,10 +213,21 @@ def settings_view(request):
             'command_before_sequence': str(app_settings.command_before_sequence),
             'command_after_sequence': str(app_settings.command_after_sequence),
             'multisensor_enabled': str(app_settings.multisensor_enabled) if (app_settings.multisensor_enabled is not None) else 'No',
+            'async_download' : str(app_settings.multisensor_download_asynch) if (app_settings.multisensor_download_asynch is not None) else 'No',
             'sensors_name': app_settings.sensors_name if (app_settings.sensors_name is not None) or (app_settings.sensors_name=='') else ms.get_default_clients_name() ,
-            'clients':clients
+            'clients':clients,
+            'downloadInProgress': check_new_images_on_devices(app_settings)
             } 
 
+
+def check_new_images_on_devices(app_settings):
+    
+    if ((app_settings.multisensor_enabled.lower() == 'yes') and (app_settings.multisensor_download_asynch.lower() == 'yes')):
+        clients = ms.get_registered_clients(app_settings.sensors_name)
+        hosts = [(ip,clients[ip]) for ip in clients]
+        return ms.check_for_new_images(hosts, app_settings.encoding_mode)
+    else:
+        return False
 
 # View for the /archive site
 @view_config(route_name='archive', renderer='archive.mako')
@@ -227,17 +238,21 @@ def archive_view(request):
     
     app_settings = DBSession.query(Settings).first()
     
-    #try:
-    #    file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
-    #    file_list = [f['title'] for f in file_list]
-    #except ServerNotFoundError:
-    file_list = None
+    try:
+        if (app_settings.gdrive_enabled == 'Yes'):
+            file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
+            file_list = [f['title'] for f in file_list]
+        else:
+            file_list = []
+    except :
+        file_list = None
             
     for picture in pictures:
         imagedata = get_picture_data(picture,file_list)
         picturedb.insert(0,imagedata)
     return {'project' : 'raspistillWeb',
-            'database' : picturedb
+            'database' : picturedb,
+            'downloadInProgress': check_new_images_on_devices(app_settings)
             }
             
 
@@ -245,6 +260,8 @@ def archive_view(request):
 @view_config(route_name='home', renderer='home.mako')
 def home_view(request):
     pictures = DBSession.query(Picture).all()
+    app_settings = DBSession.query(Settings).first()
+    
     if len(pictures) == 0:
         return HTTPFound(location='/photo')
     else:
@@ -253,6 +270,7 @@ def home_view(request):
             return {'project': 'raspistillWeb',
                     'imagedata' : picture_data,
                     'timelapse' : timelapse,
+                    'downloadInProgress': check_new_images_on_devices(app_settings)
                     }
         #elif (mktime(localtime()) - mktime(picture_data['timestamp'])) > 1800: 
         #    return HTTPFound(location='/photo') 
@@ -260,6 +278,7 @@ def home_view(request):
             return {'project': 'raspistillWeb',
                     'imagedata' : picture_data,
                     'timelapse' : timelapse,
+                    'downloadInProgress': check_new_images_on_devices(app_settings)
                     }
 
 # View for the /timelapse site
@@ -397,7 +416,11 @@ def pic_delete_view(request):
         
         for l in lst:
             if (delete_gdrive):
-                G.delete_file(app_settings.gdrive_folder,l)    
+                try:
+                    G.delete_file(app_settings.gdrive_folder,l)    
+                except:
+                    pass
+                    
             os.remove(l)
     
     if os.path.isfile(THUMBNAIL_DIRECTORY + pic.filename):
@@ -431,6 +454,7 @@ def tl_delete_view(request):
 @view_config(route_name='save')
 def save_view(request):
     global preferences_success_alert, preferences_fail_alert
+    trigger_reboot=False
 
     image_width_temp = request.params['imageWidth']
     image_height_temp = request.params['imageHeight']
@@ -459,6 +483,7 @@ def save_view(request):
     command_before_shot_temp = request.params['commandBeforeShot']
     command_after_shot_temp = request.params['commandAfterShot']
     multisensors_enabled_temp = request.params['multisensorEnabled']
+    multisensor_download_asynch = request.params['asyncDownload']
     sensors_name = request.params['sensors_name'] if request.params['sensors_name'] !='None' else ''
 
     
@@ -577,10 +602,15 @@ def save_view(request):
                 preferences_fail_alert.append('Unable to authenticate G-Drive account. Check your internet connection')
     
     app_settings.gdrive_delete_files = gdrive_delete_files_temp
-     
-
+    
+    
     if multisensors_enabled_temp:
         app_settings.multisensor_enabled = multisensors_enabled_temp
+        
+    if ( (multisensor_download_asynch=='Yes') and (app_settings.multisensor_download_asynch!=multisensor_download_asynch)):
+        trigger_reboot=True
+    
+    app_settings.multisensor_download_asynch = multisensor_download_asynch
         
     app_settings.sensors_name = sensors_name
                 
@@ -588,6 +618,8 @@ def save_view(request):
         preferences_success_alert = True 
     
     DBSession.flush()      
+
+    
     return HTTPFound(location='/settings')  
 
 @view_config(route_name='upload_gdrive')
@@ -623,9 +655,17 @@ def camera_calibr_do_pic(request):
         
         call (raspistill_command,stdout=PIPE, shell=True)
     else:
-        ip = request.params['device'].replace('.','-')
+        ip = request.params['device']
         fname = 'calibr_'+ip+'_{id}.'.format(id=request.params['count']) + app_settings.encoding_mode
-        raspistill_command = raspistill_commandline(None,app_settings)
+        raspistill_command = raspistill_commandline(None,app_settings)[0]
+        
+        ips,macs = ms.get_clients()
+        
+        idx = ips.index(ip)
+        
+        fname = os.path.join(CAMERA_CALIBR_DIRECTORY,fname)
+        
+        ms.get_picture_from_using_ssh([(ip,macs[idx])],raspistill_command,fname,False)
         
     response = Response()
     
@@ -635,35 +675,200 @@ def get_calibration_patterns():
     lst = glob(os.path.join(CAMERA_CALIBR_DIRECTORY,'calibr*.*'));
     data = {}
     
-    for f in lst:
-        path,fname = os.path.split(f)
-        _,client,_ = fname.split('_')
-        
-        client = client.replace('-','.')
+    if (lst != []):
+        for f in lst:
+            path,fname = os.path.split(f)
+            _,client,_ = fname.split('_')
+            
+            
+            
+            client = client.replace('-','.')
 
-        if (client not in data.keys()):
-            data[client] = []
-            
-        data[client].append(f)
-            
-    data[client].sort()
+            if (client not in data.keys()):
+                data[client] = []
+                
+            data[client].append(f)
+                
+        data[client].sort()
         
     return data
- 
-#@view_config(route_name="camera_calibr_do_calibr",renderer='camera_calibr.mako')
+    
+
+
+@view_config(route_name="camera_calibrated_action",renderer='view_parameters.mako')
+def camera_calibration_params_actions(request):
+    action = request.params['action']
+    pid = int(request.params['id'])
+    
+    camera_params = DBSession.query(CameraParams).filter_by(id=int(pid)).first()
+    
+    if (action=='delete'):
+        DBSession.delete(camera_params)
+        
+        
+        return HTTPFound(location='/camera_calibr') 
+    elif(action=='view'):
+        import pickle
+        
+        params = pickle.loads(camera_params.params)
+        
+        
+        return {
+            'project': 'raspistillWeb',
+            'device': camera_params.device,
+            'timestamp': camera_params.timestamp,
+            'mtx' : params['matrix'],
+            'dist' : params['dist'],
+            'rvecs' : params['rvecs'],
+            'tvecs' : params['tvecs'] 
+        }
+    elif (action=="apply"):
+        import cv2
+        import pickle
+        
+        params = pickle.loads(camera_params.params)
+        
+        filename = request.params['pic_filename']
+        
+        I = cv2.imread(os.path.join( RASPISTILL_DIRECTORY,filename));
+        I = cv2.resize(I, CALIBR_DEF_RESIZE )
+        
+        h,w = I.shape[:2]
+        
+        newcameramtx,roi = cv2.getOptimalNewCameraMatrix(params['matrix'],params['dist'], (w,h), 1, (w,h))
+        
+        mapx,mapy = cv2.initUndistortRectifyMap(params['matrix'],params['dist'],None,newcameramtx,(w,h),5)
+        
+        dst = cv2.remap(I,mapx,mapy,cv2.INTER_LINEAR)
+        
+        dst_fname = os.path.join('/tmp',filename)
+        cv2.imwrite(dst_fname, dst)
+        
+        r = FileResponse(dst_fname)
+        return r
+        #r.headers.add('Content-disposition','attachment; filename="'+str(filename)+'"')
+        
+
+@view_config(route_name="camera_calibr_do_calibr",renderer='camera_calibr.mako')
 def do_camera_calibration(request):
     import cv2
+    import numpy as np
+    import pickle
+    
+    app_settings = DBSession.query(Settings).first()
     
     action = request.params['action']
     client = request.params['client']
     
+    h = int(request.params['checkerHoriz'])
+    v = int(request.params['checkerVert'])
+    
+    checkerboardPattern = (v,h)
+    
     patterns = get_calibration_patterns()
     
-    #if (action=='detect'):
-    #   img = patterns[client]
-        
-
+    alerts = []
+    slaves = []
     
+    checkerboard_detected = {}
+    
+    if (app_settings.multisensor_enabled.lower() == 'yes'):
+        clients = ms.get_registered_clients(app_settings.sensors_name)
+        
+        
+        for k in clients:
+            slaves.append({'ip':k,'name':clients[k]})
+
+    if (action=='detect'):
+        
+        img = patterns[client]
+        
+        
+        
+        for i in range(len(img)):
+            f = img[i]
+                        
+            I = cv2.imread(f)
+            I = cv2.resize(I,CALIBR_DEF_RESIZE)
+            gs = cv2.cvtColor(I,cv2.COLOR_BGR2GRAY)
+            ret,_ = cv2.findChessboardCorners(gs,checkerboardPattern)
+            
+            checkerboard_detected[f] = ret  
+
+    elif (action=='calibr'):
+        
+        img = patterns[client]
+        
+        image_points = []
+        
+        for i in range(len(img)):
+            f = img[i]
+                        
+            I = cv2.imread(f)
+            I = cv2.resize(I,CALIBR_DEF_RESIZE)
+            gs = cv2.cvtColor(I,cv2.COLOR_BGR2GRAY)
+            ret,corners = cv2.findChessboardCorners(gs,checkerboardPattern)
+            
+            if (ret):
+                cv2.cornerSubPix(gs,corners,(3,3),(-1,-1), (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER,30,0.001) )
+                image_points.append(corners)
+                
+        objp = np.zeros((checkerboardPattern[0]*checkerboardPattern[1],3),np.float32)
+        objp[:,:2] = np.mgrid[0:checkerboardPattern[0],0:checkerboardPattern[1]].T.reshape(-1,2)
+        real_points = [objp]*len(image_points)
+        
+        try:
+            
+            _,mtx,dist,rvecs,tvecs = cv2.calibrateCamera(real_points,image_points,gs.shape[::-1],None,None)
+            camera_calibr_data = {'matrix':mtx,'dist':dist,'rvecs':rvecs,'tvecs':tvecs}
+            
+            params = CameraParams(device=client,timestamp=strftime(TIMESTAMP, localtime()),params=pickle.dumps(camera_calibr_data))
+            DBSession.add(params)
+        except _ as exp:
+            print exp
+            alerts.append('An error occured during the camera calibration process')
+        
+    elif (action=='delete'):
+        
+        for f in patterns[client]:
+            os.remove(f)
+        
+        del patterns[client]
+        
+    parameters = DBSession.query(CameraParams).all()
+    
+    return {
+        'project': 'raspistillWeb',
+        'slaves':slaves,
+        'number_images': CALIBR_DEF_NUMBER_IMAGES,
+        'interval' : CALIBR_DEF_INTERVAL,
+        'checker_horizontal' : CALIBR_DEF_CHECKER_HORIZONTAL,
+        'checker_vertical' : CALIBR_DEF_CHECKER_VERTICAL,
+        'preferences_fail_alert': alerts,
+        'calibration_images': patterns,
+        'detected_checkerboards' : checkerboard_detected,
+        'parameters': parameters,
+        'pic_filenames': get_picture_quicklist()
+        
+    }    
+
+def get_picture_quicklist():
+    pictures = DBSession.query(Picture).all()
+    
+    filenames={'Master':[]}
+    
+    for pic in pictures:
+        imagedata = get_picture_data(pic,None)
+        slaves = imagedata['slaves']
+        
+        for slave in slaves:
+            k=slave['sensor_name']
+            if (k in filenames.keys()):
+                filenames[k].append(slave['filename'])
+            else:
+                filenames[k] = [slave['filename']]
+                
+    return filenames        
    
 @view_config(route_name='camera_calibr',renderer='camera_calibr.mako')
 def camera_calibr(request):
@@ -686,6 +891,8 @@ def camera_calibr(request):
             
     calibration_images = get_calibration_patterns()
     
+    parameters = DBSession.query(CameraParams).all()
+       
     return {
         'project': 'raspistillWeb',
         'slaves':slaves,
@@ -694,8 +901,9 @@ def camera_calibr(request):
         'checker_horizontal' : CALIBR_DEF_CHECKER_HORIZONTAL,
         'checker_vertical' : CALIBR_DEF_CHECKER_VERTICAL,
         'preferences_fail_alert': alerts,
-        'calibration_images': calibration_images
-        
+        'calibration_images': calibration_images,
+        'parameters': parameters,
+        'pic_filenames': get_picture_quicklist()
     }
     
 
@@ -703,8 +911,14 @@ def camera_calibr(request):
 @view_config(route_name='reboot', renderer='shutdown.mako')
 def reboot_view(request):
     host_name = gethostname()
+    
+    app_settings = DBSession.query(Settings).first()
+    if (app_settings.multisensor_enabled == "Yes"):
+        ips,macs = ms.get_clients()
+        hosts = zip(ips,macs)
+        ms.reboot_clients(hosts)
+        
     os.system("sudo shutdown -r now")
-    #os.system("sudo shutdown -k now")
     return {'project': 'raspistillWeb',
             'hostName' : host_name,
             }
@@ -713,8 +927,14 @@ def reboot_view(request):
 @view_config(route_name='shutdown', renderer='shutdown.mako')
 def shutdown_view(request):
     host_name = gethostname()
+    
+    app_settings = DBSession.query(Settings).first()
+    if (app_settings.multisensor_enabled == "Yes"):
+        ips,macs = ms.get_clients()
+        hosts = zip(ips,macs)
+        ms.shutdown_clients(hosts)
+    
     os.system("sudo shutdown -hP now")
-    #os.system("sudo shutdown -k now")
     return {'project': 'raspistillWeb',
             'hostName' : host_name,
             }
@@ -731,14 +951,21 @@ def external_photo_view(request):
 ############ Helper functions to keep the code clean ##########################
 ###############################################################################
 
-def raspistill_commandline(filename=None,app_settings=None):
+def raspistill_commandline(filename=None,exp=None,awb=None,iso=None,app_settings=None):
     if (app_settings is None):
         app_settings = DBSession.query(Settings).first()
         
-    if app_settings.image_ISO == 'auto':
-        iso_call = ''
+    awb_call = app_settings.awb_mode if awb is None else awb
+    exp_call = app_settings.exposure_mode if exp is None else exp
+    
+    if iso is None:
+        if app_settings.image_ISO == 'auto':
+            iso_call = ''
+        else:
+            iso_call = ' -ISO ' + str(app_settings.image_ISO)
     else:
-        iso_call = ' -ISO ' + str(app_settings.image_ISO)
+        iso_call = ' -ISO '+ str(iso)
+
         
     if (filename is None):
         out = ''
@@ -750,8 +977,8 @@ def raspistill_commandline(filename=None,app_settings=None):
                 + ' -w ' + str(app_settings.image_width)
                 + ' -h ' + str(app_settings.image_height)
                 + ' -e ' + app_settings.encoding_mode
-                + ' -ex ' + app_settings.exposure_mode
-                + ' -awb ' + app_settings.awb_mode
+                + ' -ex ' + exp_call
+                + ' -awb ' + awb_call
                 + ' -rot ' + str(app_settings.image_rotation)
                 + ' -ifx ' + app_settings.image_effect
                 + iso_call
@@ -777,20 +1004,40 @@ def take_photo(filename,bypassUploads=False):
     #    camera.capture(RASPISTILL_DIRECTORY + filename + '_test', format=app_settings.encoding_mode)
     # ----- TEST CODE -----#
     
-    raspistill_command = raspistill_commandline(filename,app_settings)
-    raspistill_command_no_out = raspistill_commandline(None,app_settings)
+    raspistill_command = raspistill_commandline(filename,app_settings=app_settings)
+    raspistill_command_no_out = raspistill_commandline(None,app_settings=app_settings)
     
     r = app_settings.command_before_sequence
     r = r.replace('$f',filename)
     r = r.replace('$c',raspistill_command_no_out[0])
     run_shell_command(r)
     
-    call (raspistill_command,stdout=PIPE, shell=True)
     
+    threads = []
+
     if (app_settings.multisensor_enabled == "Yes"):
         fullpath = os.path.join(RASPISTILL_DIRECTORY,filename)   
-        ms.trigger_pictures_from_clients(raspistill_command_no_out[0],fullpath)
+        
+        download = True if app_settings.multisensor_download_asynch.lower() =='no' else False 
+        
+        clients_conf = app_settings.sensors_name
+        clients = ms.get_registered_clients(clients_conf,ip_keys=False)
+        clients_params = ms.get_clients_parameters(clients_conf)
+        
+        if (len(clients)>0):
+            commands = {}
+            for mac in clients.keys():
+                params = clients_params[mac] if mac in clients_params else {}
+                c = raspistill_commandline(None,app_settings=app_settings,**params)
+                commands[mac] = c[0]
+                
+            threads = ms.trigger_pictures_from_clients(commands,fullpath,download=download,join=False)
     
+    call (raspistill_command,stdout=PIPE, shell=True)
+
+    for t in threads:
+        t.join()
+
     run_shell_command(app_settings.command_after_sequence)
     
 #    if not (RASPISTILL_DIRECTORY == 'raspistillweb/pictures/'):
@@ -817,12 +1064,18 @@ def take_photo(filename,bypassUploads=False):
             print r.items()
             print 'Image URI:', r.get('uri')
 
-    #if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
-    #    lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
-    #    lst.append(RASPISTILL_DIRECTORY + filename)
+    if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
+        print ">>>> GDrive Upload <<<<"
+        lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
+        lst.append(RASPISTILL_DIRECTORY + filename)
         
-    #    for p in lst:
-    #        G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
+        for p in lst:
+            try:
+                G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
+            except ResponseNotReady:
+                pass
+            except ServerNotFoundError:
+                pass
         
 
     return
@@ -1003,7 +1256,7 @@ def get_picture_data(picture,file_list=[]):
         slaves.append(l[a+1:b])
         
 
-    imagedata['slaves'] = [{'filename':picture.filename,'sensor_name':'Server','gdrive':None}] + [{'filename':picture.filename.replace('.'+picture.encoding_mode,'.'+s+'.'+picture.encoding_mode),'sensor_name':ms.map_client_name(s,app_settings.sensors_name),'gdrive':None} for s in slaves]
+    imagedata['slaves'] = [{'filename':picture.filename,'sensor_name':'Master','gdrive':None}] + [{'filename':picture.filename.replace('.'+picture.encoding_mode,'.'+s+'.'+picture.encoding_mode),'sensor_name':ms.map_client_name(s,app_settings.sensors_name),'gdrive':None} for s in slaves]
     
     show_upload_button = False
     
@@ -1024,7 +1277,6 @@ def get_picture_data(picture,file_list=[]):
     return imagedata
 
 def run_shell_command(command=""):
-    print ">>> "+command
     if command:
         p_command = Popen(command,shell=True,stdout=PIPE)
         p_command.wait()
