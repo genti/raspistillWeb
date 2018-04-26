@@ -64,6 +64,8 @@ class Settings(Base):
     multisensor_enabled = Column(Text,default='No')
     multisensor_download_asynch = Column(Text,default='No')
     sensors_name = Column(Text)
+    hdr_enabled = Column(Text)
+    hdr_exposure_times = Column(Text)
 
 class Timelapse(Base):
     __tablename__ = 'timelapse'

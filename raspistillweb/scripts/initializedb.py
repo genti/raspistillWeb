@@ -97,4 +97,4 @@ def main(argv=sys.argv):
         DBSession.add(timelapse)
         
         camara_params = CameraParams(timestamp='-',params='')
-        DBSession.add(camera_params)
+        DBSession.add(camara_params)

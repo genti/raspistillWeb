@@ -37,6 +37,8 @@ from datetime import *
 from glob import glob
 from sys import stderr
 
+import re
+
 
 
 #import Image
@@ -48,7 +50,6 @@ from bqapi.util import save_blob
 from lxml import etree
 #from time import time
 from socket import gethostname
-#import picamera
 
 from sqlalchemy.exc import DBAPIError
 import transaction
@@ -216,6 +217,8 @@ def settings_view(request):
             'async_download' : str(app_settings.multisensor_download_asynch) if (app_settings.multisensor_download_asynch is not None) else 'No',
             'sensors_name': app_settings.sensors_name if (app_settings.sensors_name is not None) or (app_settings.sensors_name=='') else ms.get_default_clients_name() ,
             'clients':clients,
+            'hdr_enabled': str(app_settings.hdr_enabled) if (app_settings.hdr_enabled is not None) else 'No',
+            'hdr_exposure_times': app_settings.hdr_exposure_times if app_settings.hdr_exposure_times is not None else '',
             'downloadInProgress': check_new_images_on_devices(app_settings)
             } 
 
@@ -484,9 +487,10 @@ def save_view(request):
     command_after_shot_temp = request.params['commandAfterShot']
     multisensors_enabled_temp = request.params['multisensorEnabled']
     multisensor_download_asynch = request.params['asyncDownload']
+    hdr_enabled = request.params['hdrEnabled']
+    hdr_exposure_times = request.params['exposureTimes']
     sensors_name = request.params['sensors_name'] if request.params['sensors_name'] !='None' else ''
 
-    
 
     app_settings = DBSession.query(Settings).first()
     
@@ -602,6 +606,9 @@ def save_view(request):
                 preferences_fail_alert.append('Unable to authenticate G-Drive account. Check your internet connection')
     
     app_settings.gdrive_delete_files = gdrive_delete_files_temp
+    
+    app_settings.hdr_enabled = hdr_enabled
+    app_settings.hdr_exposure_times = hdr_exposure_times
     
     
     if multisensors_enabled_temp:
@@ -951,7 +958,7 @@ def external_photo_view(request):
 ############ Helper functions to keep the code clean ##########################
 ###############################################################################
 
-def raspistill_commandline(filename=None,exp=None,awb=None,iso=None,app_settings=None):
+def raspistill_commandline(filename=None,exp=None,awb=None,iso=None,shutter_speed=0,app_settings=None):
     if (app_settings is None):
         app_settings = DBSession.query(Settings).first()
         
@@ -965,6 +972,11 @@ def raspistill_commandline(filename=None,exp=None,awb=None,iso=None,app_settings
             iso_call = ' -ISO ' + str(app_settings.image_ISO)
     else:
         iso_call = ' -ISO '+ str(iso)
+        
+    shutter_speed_call = ''
+    
+    if (shutter_speed is not None) and (shutter_speed > 0):
+		shutter_speed_call = ' -ss '+ str(shutter_speed)
 
         
     if (filename is None):
@@ -982,11 +994,64 @@ def raspistill_commandline(filename=None,exp=None,awb=None,iso=None,app_settings
                 + ' -rot ' + str(app_settings.image_rotation)
                 + ' -ifx ' + app_settings.image_effect
                 + iso_call
+                + shutter_speed_call
                 + out ]
         
     return command
+    
+ 
+def perform_hdr(filename):
+	import cv2
+	import numpy as np
+	
+	fname,ext = os.path.splitext(filename)
+	lst = glob(os.path.join(RASPISTILL_DIRECTORY,fname+"*"))
+	
+	files = {}
+	
+	for f in lst:
+		m = re.search("IMG_(.+)\.([0-9a-fA-F]{4})\.(.*)",f)
+		key = 'master' if m is None else m.group(2)
+		
+		#finding exposure on name
+		
+		m = re.search("IMG_(.+)\.SS\=1f([0-9]+)\.(.*)",f)
+		
+		if (m is not None):
+			exposure_speed = m.group(2)
+			if (key not in files.keys()):
+				files[key]={exposure_speed:f}
+			else:
+				files[key][exposure_speed] = f
+				
+	
+	for device in files.keys():
+		exposures = files[device]
+		times = np.array([ 1./float(t) for t in exposures.keys() ],dtype=np.float32)
+		imgs = [cv2.imread(os.path.join(exposures[f])) for f in exposures]
+		
+		calibration = cv2.createCalibrateDebevec()
+		responseDebevec = calibration.process(imgs,times)
+		
+		mergeDebevec = cv2.createMergeDebevec()
+		hdrDebevec = mergeDebevec.process(imgs,times,responseDebevec)
+		
+		dragoTonemap = cv2.createTonemapDrago(1.0,0.7)
+		ldrDrago = dragoTonemap.process(hdrDebevec)
+		ldrDrago = 3 * ldrDrago
+		
+		if (device == 'master'):
+			save_as = fname + ext
+		else:
+			save_as = fname + '.'+device + ext
+		
+		cv2.imwrite( os.path.join(RASPISTILL_DIRECTORY,save_as) ,ldrDrago*255)
+		
+		for f in lst:
+			os.remove(os.path.join(f))
+		
 
-def take_photo(filename,bypassUploads=False):
+def take_photo(picture_name,bypassUploads=False):
     app_settings = DBSession.query(Settings).first()
 
     # ----- TEST CODE -----#
@@ -1003,50 +1068,70 @@ def take_photo(filename,bypassUploads=False):
     #    camera.iso = 0 if app_settings.image_ISO == 'auto' else app_settings.image_ISO
     #    camera.capture(RASPISTILL_DIRECTORY + filename + '_test', format=app_settings.encoding_mode)
     # ----- TEST CODE -----#
-    
-    raspistill_command = raspistill_commandline(filename,app_settings=app_settings)
-    raspistill_command_no_out = raspistill_commandline(None,app_settings=app_settings)
-    
-    r = app_settings.command_before_sequence
-    r = r.replace('$f',filename)
-    r = r.replace('$c',raspistill_command_no_out[0])
-    run_shell_command(r)
-    
-    
-    threads = []
 
-    if (app_settings.multisensor_enabled == "Yes"):
-        fullpath = os.path.join(RASPISTILL_DIRECTORY,filename)   
-        
-        download = True if app_settings.multisensor_download_asynch.lower() =='no' else False 
-        
-        clients_conf = app_settings.sensors_name
-        clients = ms.get_registered_clients(clients_conf,ip_keys=False)
-        clients_params = ms.get_clients_parameters(clients_conf)
-        
-        if (len(clients)>0):
-            commands = {}
-            for mac in clients.keys():
-                params = clients_params[mac] if mac in clients_params else {}
-                c = raspistill_commandline(None,app_settings=app_settings,**params)
-                commands[mac] = c[0]
-                
-            threads = ms.trigger_pictures_from_clients(commands,fullpath,download=download,join=False)
-    
-    call (raspistill_command,stdout=PIPE, shell=True)
+    hdr_speeds = [0]
+    hdr = False
 
-    for t in threads:
-        t.join()
+    if (app_settings.hdr_enabled.lower() == 'yes'):
+	    hdr_speeds = app_settings.hdr_exposure_times.split(';')
+	    hdr = True
 
-    run_shell_command(app_settings.command_after_sequence)
+    for speed in hdr_speeds:
+		
+		if (speed>0):
+			[name,ext] = os.path.splitext(picture_name)
+			filename = name + ".SS=1f{}".format(speed) +ext
+			
+			speed = long(round(1/float(speed) * 1000000))
+		else:
+		    filename = picture_name
     
-#    if not (RASPISTILL_DIRECTORY == 'raspistillweb/pictures/'):
-#        call (
-#            ['ln -s ' + RASPISTILL_DIRECTORY + filename
-#            + ' raspistillweb/pictures/' + filename], shell=True
-#            )
-    #generate_thumbnail(filename)
+		raspistill_command = raspistill_commandline(filename,shutter_speed=speed,app_settings=app_settings)
+		raspistill_command_no_out = raspistill_commandline(None,shutter_speed=speed,app_settings=app_settings)
+		
+		r = app_settings.command_before_sequence
+		r = r.replace('$f',filename)
+		r = r.replace('$c',raspistill_command_no_out[0])
+		run_shell_command(r)
+
+
+		print raspistill_command
+		
+		
+		threads = []
+
+		if (app_settings.multisensor_enabled == "Yes"):
+			fullpath = os.path.join(RASPISTILL_DIRECTORY,filename)   
+			
+			download = True if app_settings.multisensor_download_asynch.lower() =='no' else False 
+			
+			clients_conf = app_settings.sensors_name
+			clients = ms.get_registered_clients(clients_conf,ip_keys=False)
+			clients_params = ms.get_clients_parameters(clients_conf)
+			
+			if (len(clients)>0):
+				commands = {}
+				for mac in clients.keys():
+					params = clients_params[mac] if mac in clients_params else {}
+					c = raspistill_commandline(None,shutter_speed=speed,app_settings=app_settings,**params)
+					commands[mac] = c[0]
+					
+				threads = ms.trigger_pictures_from_clients(commands,fullpath,download=download,join=False)
+		
+		call (raspistill_command,stdout=PIPE, shell=True)
+
+		for t in threads:
+			t.join()
+			
+		r = app_settings.command_after_sequence
+		r = r.replace('$f',filename)
+		r = r.replace('$c',raspistill_command_no_out[0])
+		run_shell_command(r)
+		
+    if (hdr):
+        perform_hdr(picture_name)
     
+
     if (app_settings.bisque_enabled == 'Yes') and not bypassUploads:
         resource = etree.Element('image', name=filename)
         etree.SubElement(resource, 'tag', name="experiment", value="Phenotiki")

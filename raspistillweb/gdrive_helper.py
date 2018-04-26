@@ -1,5 +1,9 @@
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
+try:
+	from pydrive.auth import GoogleAuth
+	from pydrive.drive import GoogleDrive
+except:
+	import warnings
+	warnings.warn('The module pydrive is not installed. Google Drive uploads will not work.')
 
 from os import path
 
