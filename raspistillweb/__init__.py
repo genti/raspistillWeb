@@ -41,7 +41,7 @@ def main(global_config, **settings):
     config.add_route('home','/')
     config.add_route('settings','/settings')
     config.add_route('save','/save')
-    config.add_route('delete_picture','/delete_picture')
+    config.add_route('action_picture','/action_picture')
     config.add_route('delete_timelapse','/delete_timelapse')
     config.add_route('archive','/archive')
     config.add_route('timelapse','/timelapse')

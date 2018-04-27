@@ -171,8 +171,8 @@
             
             
             <div class="form-group">
-              <label for="imageResolution1" class="col-lg-2 control-label">HDR</label>
-              <div class="col-sm-4">
+              <label for="hdrEnabled" class="col-lg-2 control-label">HDR</label>
+              <div class="col-lg-4">
                 <div class="btn-group" data-toggle="buttons">
                   <label class="btn btn-default ${'active' if hdr_enabled == 'Yes' else ''}" title="Enable HDR">
                     <input type="radio" name="hdrEnabled" value="Yes" ${'checked' if hdr_enabled == 'Yes' else ''}> Yes
@@ -183,7 +183,7 @@
                 </div>
               </div>  
               
-              <div class="col-sm-6">
+              <div class="col-lg-6">
                 <div class="input-group">
                   <input type="text" class="form-control" name="exposureTimes" value="${hdr_exposure_times}" placeholder="1000;500;250" title="Set custom exposur times.">
                   <span class="input-group-addon">Exposure times</span>

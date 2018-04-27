@@ -403,34 +403,63 @@ def photo_view(request,ret=False):
                 
 
 # View for the archive delete - no site will be generated
-@view_config(route_name='delete_picture')
-def pic_delete_view(request):    
-    p_id = request.params['id']
-    pic = DBSession.query(Picture).filter_by(id=int(p_id)).first()
-    print('Deleting picture and thumbnail...')
-    
-    app_settings = DBSession.query(Settings).first()
-    
-    delete_gdrive = app_settings.gdrive_enabled.lower() == app_settings.gdrive_delete_files.lower() == 'yes'
-    
-    if os.path.isfile(RASPISTILL_DIRECTORY + pic.filename):
-        lst = glob(RASPISTILL_DIRECTORY + pic.filename.replace('.png','.*.png'));
-        lst.append(RASPISTILL_DIRECTORY + pic.filename)
-        
-        for l in lst:
-            if (delete_gdrive):
-                try:
-                    G.delete_file(app_settings.gdrive_folder,l)    
-                except:
-                    pass
-                    
-            os.remove(l)
-    
-    if os.path.isfile(THUMBNAIL_DIRECTORY + pic.filename):
-        os.remove(THUMBNAIL_DIRECTORY + pic.filename)
-        
-    DBSession.delete(pic)
-    return HTTPFound(location='/archive')
+@view_config(route_name='action_picture')
+def pic_action_view(request):
+    ids = [int(v) for (k, v) in request.params.items() if k == 'pic_id']
+
+    if request.params['action'] == 'delete':
+        for p_id in ids:
+            pic = \
+                DBSession.query(Picture).filter_by(id=int(p_id)).first()
+            print 'Deleting picture and thumbnail...'
+
+            app_settings = DBSession.query(Settings).first()
+
+            delete_gdrive = app_settings.gdrive_enabled.lower() \
+                == app_settings.gdrive_delete_files.lower() == 'yes'
+
+            if os.path.isfile(RASPISTILL_DIRECTORY + pic.filename):
+                lst = glob(RASPISTILL_DIRECTORY
+                           + pic.filename.replace('.png', '.*.png'))
+                lst.append(RASPISTILL_DIRECTORY + pic.filename)
+
+                for l in lst:
+                    if delete_gdrive:
+                        try:
+                            G.delete_file(app_settings.gdrive_folder, l)
+                        except:
+                            pass
+
+                    os.remove(l)
+
+            if os.path.isfile(THUMBNAIL_DIRECTORY + pic.filename):
+                os.remove(THUMBNAIL_DIRECTORY + pic.filename)
+
+            DBSession.delete(pic)
+        return HTTPFound(location='/archive')
+    elif request.params['action'] == 'download':
+        filenames = []
+
+        for p_id in ids:
+            pic = \
+                DBSession.query(Picture).filter_by(id=int(p_id)).first()
+            [f, ext] = os.path.splitext(pic.filename)
+            filenames += glob(os.path.join(RASPISTILL_DIRECTORY, f + '*'
+                              ))
+
+        zipname = strftime(TIMESTAMP, localtime()) + '.zip'
+        output = os.path.join('/', 'var', 'tmp', zipname)
+
+        command = ['zip', '-j', output] + filenames
+
+        call(command)
+
+        resp = FileResponse(output)
+        resp.content_disposition = 'attachment; filename="%s"' % zipname
+
+        return resp
+    else:
+        raise Exception('Action %s not found' % request.params['action'])
 
 # View for the timelapse delete - no site will be generated
 @view_config(route_name='delete_timelapse')
@@ -1038,7 +1067,7 @@ def perform_hdr(filename):
 		
 		dragoTonemap = cv2.createTonemapDrago(1.0,0.7)
 		ldrDrago = dragoTonemap.process(hdrDebevec)
-		ldrDrago = 3 * ldrDrago
+		ldrDrago = ldrDrago
 		
 		if (device == 'master'):
 			save_as = fname + ext
