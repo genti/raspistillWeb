@@ -8,6 +8,11 @@
     <link href="${request.static_url('raspistillweb:static/css/bootstrap-responsive.css')}" rel="stylesheet">
     <link href="${request.static_url('raspistillweb:static/css/customizations.css')}" rel="stylesheet">
     <script src="${request.static_url('raspistillweb:static/js/jquery.min.js')}"></script>
+    <style>
+      .no_opacity {
+        opacity: 1 !important;
+      }
+    </style>
   </head>
   <body>
 

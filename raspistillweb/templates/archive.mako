@@ -29,7 +29,7 @@
           <div class="panel panel-default">
             <div class="panel-heading">
 
-                <input type="checkbox" name="pic_id" value="${file['id']}" class="close">
+                <input type="checkbox" name="pic_id" value="${file['id']}" class="close no_opacity">
 
               <h3 class="panel-title">${file['date']}</h3>
             </div>

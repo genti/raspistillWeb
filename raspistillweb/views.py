@@ -1106,7 +1106,7 @@ def take_photo(picture_name,bypassUploads=False):
 	    hdr = True
 
     for speed in hdr_speeds:
-		
+		speed = int(speed)
 		if (speed>0):
 			[name,ext] = os.path.splitext(picture_name)
 			filename = name + ".SS=1f{}".format(speed) +ext
@@ -1157,8 +1157,8 @@ def take_photo(picture_name,bypassUploads=False):
 		r = r.replace('$c',raspistill_command_no_out[0])
 		run_shell_command(r)
 		
-    if (hdr):
-        perform_hdr(picture_name)
+    #if (hdr):
+        #perform_hdr(picture_name)
     
 
     if (app_settings.bisque_enabled == 'Yes') and not bypassUploads:
