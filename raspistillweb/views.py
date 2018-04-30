@@ -1076,8 +1076,8 @@ def perform_hdr(filename):
 		
 		cv2.imwrite( os.path.join(RASPISTILL_DIRECTORY,save_as) ,ldrDrago*255)
 		
-		for f in lst:
-			os.remove(os.path.join(f))
+	for f in lst:
+		os.remove(os.path.join(f))
 		
 
 def take_photo(picture_name,bypassUploads=False):
@@ -1157,8 +1157,8 @@ def take_photo(picture_name,bypassUploads=False):
 		r = r.replace('$c',raspistill_command_no_out[0])
 		run_shell_command(r)
 		
-    #if (hdr):
-        #perform_hdr(picture_name)
+    if (hdr):
+        perform_hdr(picture_name)
     
 
     if (app_settings.bisque_enabled == 'Yes') and not bypassUploads:
