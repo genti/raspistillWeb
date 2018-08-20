@@ -17,6 +17,7 @@
 from pyramid.config import Configurator
 from sqlalchemy import engine_from_config
 import multisensors as ms
+import gdrive_helper as g
 
 from .models import (
     DBSession,
@@ -60,6 +61,8 @@ def main(global_config, **settings):
     config.scan()
     
     app_settings = DBSession.query(Settings).first()
+    
     ms.init_thread(app_settings)
+    g.init_scheduler(app_settings)
     
     return config.make_wsgi_app()

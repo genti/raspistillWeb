@@ -330,7 +330,8 @@
                 <input type="text" class="form-control" id="GdriveFolder1" name="gdriveFolder" value="${gdrive_folder}">
               </div>
            </div>
-
+           
+           % if false:
            <div class="form-group">
               <label for="GdriveUser1" class="col-lg-2 control-label">Google Drive Client ID</label>
               <div class="col-lg-10">
@@ -344,6 +345,17 @@
                 <input type="text" class="form-control" id="GdriveSecret1" name="gdriveSecret" value="${gdrive_secret}">
               </div>
             </div>
+            % endif
+            
+            % if gdrive_enabled == 'Yes':
+            <div class="form-group">
+              <label for="GdriveToken" class="col-lg-2 control-label">Google Drive Authetincation Token</label>
+              <div class="col-lg-10">
+                <input type="text" class="form-control" id="gdrive_auth_token" name="gdrive_auth_token" value="${gdrive_auth_token}">
+              </div>
+            </div>
+            <span class="help-block">Go to <a href="${gdrive_auth_url}" target="_blank">this Authentication URL</a> and copy here the code.</span>
+            % endif
             
             <div class="form-group">
               <label for="BisqueEnabled1" class="col-lg-2 control-label">Delete files</label>

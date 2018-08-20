@@ -12,6 +12,11 @@
                         <select name="action" class="form-control" id="availableActions">
                             <option>Select an action...</option>
                             <option value="download">Download</option>
+                            
+                            % if gdrive_upload :
+                            <option value="gdrive">Upload on GDrive</option>
+                            % endif
+                            
                             <option value="delete">Delete</option>
                         </select>
                         
@@ -51,12 +56,6 @@
                     <a href="${request.static_url('raspistillweb:pictures/')}${s['filename']}">${s['sensor_name']}</a>&nbsp;&nbsp;
                 % endfor
                 </dd>
-                
-                % if file['gdrive_upload']:
-                <form action="upload_gdrive" method="POST">
-                    <button type="submit" name="id" value="${file['id']}" class="btn btn-info">&uarr;Upload</button>
-                </form>
-                % endif
               </dl>
             </div>
           </div>     

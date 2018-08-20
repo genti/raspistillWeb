@@ -29,6 +29,7 @@ import zipfile
 import fileinput
 import gdrive_helper as G
 import multisensors as ms
+import warnings
 
 from subprocess import call, Popen, PIPE 
 from time import gmtime, strftime, localtime, asctime, mktime, sleep
@@ -45,8 +46,13 @@ import re
 from PIL import Image
 ##from bqapi.bqclass import fromXml
 #import bqapi as zzz
-from bqapi.comm import BQSession#, BQCommError
-from bqapi.util import save_blob
+
+try:
+	from bqapi.comm import BQSession#, BQCommError
+	from bqapi.util import save_blob
+except ImportError:
+	warnings.warn("Bisque module not installed. Some functionality might not work properly",ImportWarning)
+
 from lxml import etree
 #from time import time
 from socket import gethostname
@@ -203,9 +209,11 @@ def settings_view(request):
             'bisque_local_copy' : str(app_settings.bisque_local_copy),
             'gdrive_enabled' : str(app_settings.gdrive_enabled),
             'gdrive_folder' : str(app_settings.gdrive_folder),
-            'gdrive_user' : str(app_settings.gdrive_user),
-            'gdrive_secret' : str(app_settings.gdrive_secret),
+            #'gdrive_user' : str(app_settings.gdrive_user),
+            #'gdrive_secret' : str(app_settings.gdrive_secret),
             'gdrive_file_delete' : str(app_settings.gdrive_delete_files),
+            'gdrive_auth_token'  : str(app_settings.gdrive_authentication_token),
+            'gdrive_auth_url': G.gdrive_auth_url() if app_settings.gdrive_enabled.lower() =='yes' else None,
             'preferences_fail_alert' : preferences_fail_alert_temp,
             'preferences_success_alert' : preferences_success_alert_temp,
             'number_images' :  str(app_settings.number_images),
@@ -235,27 +243,30 @@ def check_new_images_on_devices(app_settings):
 # View for the /archive site
 @view_config(route_name='archive', renderer='archive.mako')
 def archive_view(request):
-
     pictures = DBSession.query(Picture).all()
     picturedb = []
     
     app_settings = DBSession.query(Settings).first()
     
     try:
-        if (app_settings.gdrive_enabled == 'Yes'):
-            file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
+        if (G.is_gdrive_operative(app_settings)):
+            file_list = G.get_all_uploaded_images(app_settings.gdrive_folder,app_settings.gdrive_authentication_token)
             file_list = [f['title'] for f in file_list]
         else:
             file_list = []
-    except :
+        
+    except Exception,e:
+        print ">>>>>>>>>>>>>>>>>>>>>>>>>>"+str(e)
         file_list = None
+    
             
     for picture in pictures:
         imagedata = get_picture_data(picture,file_list)
         picturedb.insert(0,imagedata)
     return {'project' : 'raspistillWeb',
             'database' : picturedb,
-            'downloadInProgress': check_new_images_on_devices(app_settings)
+            'downloadInProgress': check_new_images_on_devices(app_settings),
+            'gdrive_upload': app_settings.gdrive_enabled.lower() == 'yes'
             }
             
 
@@ -268,7 +279,17 @@ def home_view(request):
     if len(pictures) == 0:
         return HTTPFound(location='/photo')
     else:
-        picture_data = get_picture_data(pictures[-1])
+	    try:
+		    if (G.is_gdrive_operative(app_settings)):
+                file_list = G.get_all_uploaded_images(app_settings.gdrive_folder,app_settings.gdrive_authentication_token)
+                file_list = [f['title'] for f in file_list]
+            else:
+                file_list = []
+        except Exception,e:
+            print ">>>>>>>>>>>>>>>>>>>>>>>>>>"+str(e)
+            file_list = None
+
+        picture_data = get_picture_data(pictures[-1],file_list)
         if timelapse:            
             return {'project': 'raspistillWeb',
                     'imagedata' : picture_data,
@@ -426,7 +447,7 @@ def pic_action_view(request):
                 for l in lst:
                     if delete_gdrive:
                         try:
-                            G.delete_file(app_settings.gdrive_folder, l)
+                            G.delete_file(app_settings.gdrive_folder, l,app_settings.gdrive_authentication_token)
                         except:
                             pass
 
@@ -436,6 +457,25 @@ def pic_action_view(request):
                 os.remove(THUMBNAIL_DIRECTORY + pic.filename)
 
             DBSession.delete(pic)
+        return HTTPFound(location='/archive')
+    if request.params['action'] == 'gdrive':
+        for p_id in ids:
+            pic = DBSession.query(Picture).filter_by(id=int(p_id)).first()
+
+            app_settings = DBSession.query(Settings).first()
+
+            if os.path.isfile(RASPISTILL_DIRECTORY + pic.filename):
+                lst = glob(RASPISTILL_DIRECTORY
+                           + pic.filename.replace('.'+app_settings.encoding_mode, '.*.'+app_settings.encoding_mode))
+                lst.append(RASPISTILL_DIRECTORY + pic.filename)
+
+                for l in lst:
+                        print l
+                        try:
+							G.upload_file(l,MIME_TYPES[app_settings.encoding_mode],app_settings)
+                        except Exception, e:
+                            print ">>>>>>>>>>>>>>>>>" + str(e)
+
         return HTTPFound(location='/archive')
     elif request.params['action'] == 'download':
         filenames = []
@@ -506,8 +546,9 @@ def save_view(request):
     bisque_local_copy_temp = request.params['bisqueLocalCopy']
     gdrive_enabled_temp = request.params['gdriveEnabled']
     gdrive_folder_temp = request.params['gdriveFolder']
-    gdrive_user_temp = request.params['gdriveUser']
-    gdrive_secret_temp = request.params['gdriveSecret']
+    #gdrive_user_temp = request.params['gdriveUser']
+    #gdrive_secret_temp = request.params['gdriveSecret']
+    gdrive_auth_token_temp = request.params['gdrive_auth_token']
     gdrive_delete_files_temp = request.params['gdriveDelete']
     number_shots_temp = request.params['numberImages']
     command_before_sequence_temp = request.params['commandBeforeAcquisition']
@@ -618,23 +659,24 @@ def save_view(request):
         elif gmail_enabled:
             preferences_fail_alert.append(GDRIVE_FOLDER_ALERT)
             
-        if gdrive_user_temp:
-            app_settings.gdrive_user = gdrive_user_temp
-        elif gmail_enabled:
-            preferences_fail_alert.append(GDRIVE_USER_ALERT)
+        #if gdrive_user_temp:
+        #    app_settings.gdrive_user = gdrive_user_temp
+        #elif gmail_enabled:
+        #    preferences_fail_alert.append(GDRIVE_USER_ALERT)
         
-        if gdrive_secret_temp:
-            app_settings.gdrive_secret = gdrive_secret_temp
-        elif gmail_enabled:
-            preferences_fail_alert.append(GDRIVE_SECRET_ALERT)
+        #if gdrive_secret_temp:
+        #    app_settings.gdrive_secret = gdrive_secret_temp
+        #elif gmail_enabled:
+        #    preferences_fail_alert.append(GDRIVE_SECRET_ALERT)
                 
-        if gmail_enabled:
+        if gmail_enabled and ((gdrive_auth_token_temp is not None) and (len(gdrive_auth_token_temp)>0)) :
             try:
-                G.gdrive_init(app_settings.gdrive_folder,gdrive_user_temp,gdrive_secret_temp,RASPISTILL_ROOT+'/settings.template.yaml')
+                G.gdrive_init(app_settings.gdrive_folder, gdrive_auth_token_temp ,RASPISTILL_ROOT+'/settings.template.yaml')
             except ServerNotFoundError:
                 preferences_fail_alert.append('Unable to authenticate G-Drive account. Check your internet connection')
     
     app_settings.gdrive_delete_files = gdrive_delete_files_temp
+    app_settings.gdrive_authentication_token = gdrive_auth_token_temp;
     
     app_settings.hdr_enabled = hdr_enabled
     app_settings.hdr_exposure_times = hdr_exposure_times
@@ -658,21 +700,21 @@ def save_view(request):
     
     return HTTPFound(location='/settings')  
 
-@view_config(route_name='upload_gdrive')
-def upload_gdrive_view(request):
-    tt_id = request.params['id']
-    picture = DBSession.query(Picture).filter_by(id=int(tt_id)).first()
-    imagedata = get_picture_data(picture)
+#@view_config(route_name='upload_gdrive')
+#def upload_gdrive_view(request):
+    #tt_id = request.params['id']
+    #picture = DBSession.query(Picture).filter_by(id=int(tt_id)).first()
+    #imagedata = get_picture_data(picture)
     
-    app_settings = DBSession.query(Settings).first()
+    #app_settings = DBSession.query(Settings).first()
     
-    for client in imagedata['slaves']:
-        if client['gdrive'].lower() == 'no':
-            fullpath = os.path.join(RASPISTILL_DIRECTORY,client['filename'])
-            G.upload_file(fullpath,MIME_TYPES[app_settings.encoding_mode],app_settings)
+    #for client in imagedata['slaves']:
+        #if client['gdrive'].lower() == 'no':
+            #fullpath = os.path.join(RASPISTILL_DIRECTORY,client['filename'])
+            #G.upload_file(fullpath,MIME_TYPES[app_settings.encoding_mode],app_settings)
             
-    print request
-    return HTTPFound(location='/') 
+    #print request
+    #return HTTPFound(location='/') 
     
 
 @view_config(route_name='camera_calibr_do_pic')
@@ -1178,18 +1220,18 @@ def take_photo(picture_name,bypassUploads=False):
             print r.items()
             print 'Image URI:', r.get('uri')
 
-    if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
-        print ">>>> GDrive Upload <<<<"
-        lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
-        lst.append(RASPISTILL_DIRECTORY + filename)
+    #if (app_settings.gdrive_enabled == 'Yes') and not bypassUploads:
+        #print ">>>> GDrive Upload <<<<"
+        #lst = get_clients_file_list(RASPISTILL_DIRECTORY + filename,app_settings.encoding_mode);
+        #lst.append(RASPISTILL_DIRECTORY + filename)
         
-        for p in lst:
-            try:
-                G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
-            except ResponseNotReady:
-                pass
-            except ServerNotFoundError:
-                pass
+        #for p in lst:
+            #try:
+                #G.upload_file(p,MIME_TYPES[app_settings.encoding_mode],app_settings)
+            #except ResponseNotReady:
+                #pass
+            #except ServerNotFoundError:
+                #pass
         
 
     return
@@ -1336,13 +1378,13 @@ def get_clients_file_list(filename,encoding_mode):
 def get_picture_data(picture,file_list=[]):
     app_settings = DBSession.query(Settings).first()
     
-    if ( (file_list is not None) and (len(file_list)==0)):
-        if (app_settings.gdrive_enabled == 'Yes'):
-            try:
-                file_list = G.get_all_uploaded_images(app_settings.gdrive_folder)
-                file_list = [f['title'] for f in file_list]
-            except ServerNotFoundError:
-                file_list=None
+    #if ( (file_list is not None) and (len(file_list)==0)):
+    #    if G.is_gdrive_operative(app_settings):
+    #        try:
+    #            file_list = G.get_all_uploaded_images(app_settings.gdrive_folder, app_settings.gdrive_authentication_token)
+    #            file_list = [f['title'] for f in file_list]
+    #        except ServerNotFoundError:
+    #            file_list=None
         
     imagedata = dict()
     imagedata['id'] = str(picture.id)
@@ -1371,22 +1413,16 @@ def get_picture_data(picture,file_list=[]):
         
 
     imagedata['slaves'] = [{'filename':picture.filename,'sensor_name':'Master','gdrive':None}] + [{'filename':picture.filename.replace('.'+picture.encoding_mode,'.'+s+'.'+picture.encoding_mode),'sensor_name':ms.map_client_name(s,app_settings.sensors_name),'gdrive':None} for s in slaves]
+   
     
-    show_upload_button = False
-    
-    if (app_settings.gdrive_enabled == 'Yes'):
-        
+    if (G.is_gdrive_operative(app_settings)):
         for j in range(len(imagedata['slaves'])):
             title,_ = os.path.splitext(imagedata['slaves'][j]['filename'])
-            if (file_list is not None):
+            if ((file_list is not None) and (G.gdrive_authentication(app_settings.gdrive_authentication_token) is not None)):
                 imagedata['slaves'][j]['gdrive'] = 'Yes' if title in file_list else 'No'
             else:
                 imagedata['slaves'][j]['gdrive'] = 'Unk' #unknown due to internet connect
-            
-            if (imagedata['slaves'][j]['gdrive'] == 'No'):
-                show_upload_button = True
-    
-    imagedata['gdrive_upload'] = show_upload_button
+
         
     return imagedata
 
