@@ -249,10 +249,10 @@ def archive_view(request):
     app_settings = DBSession.query(Settings).first()
     
     try:
-        if (G.is_gdrive_operative(app_settings)):
+       if (G.is_gdrive_operative(app_settings)):
             file_list = G.get_all_uploaded_images(app_settings.gdrive_folder,app_settings.gdrive_authentication_token)
             file_list = [f['title'] for f in file_list]
-        else:
+       else:
             file_list = []
         
     except Exception,e:
@@ -280,30 +280,30 @@ def home_view(request):
         return HTTPFound(location='/photo')
     else:
 	    try:
-		    if (G.is_gdrive_operative(app_settings)):
-                file_list = G.get_all_uploaded_images(app_settings.gdrive_folder,app_settings.gdrive_authentication_token)
-                file_list = [f['title'] for f in file_list]
-            else:
-                file_list = []
-        except Exception,e:
-            print ">>>>>>>>>>>>>>>>>>>>>>>>>>"+str(e)
-            file_list = None
+                if (G.is_gdrive_operative(app_settings)):
+                    file_list = G.get_all_uploaded_images(app_settings.gdrive_folder,app_settings.gdrive_authentication_token)
+                    file_list = [f['title'] for f in file_list]
+                else:
+                    file_list = []
+            except Exception,e:
+                print ">>>>>>>>>>>>>>>>>>>>>>>>>>"+str(e)
+                file_list = None
 
-        picture_data = get_picture_data(pictures[-1],file_list)
-        if timelapse:            
-            return {'project': 'raspistillWeb',
-                    'imagedata' : picture_data,
-                    'timelapse' : timelapse,
-                    'downloadInProgress': check_new_images_on_devices(app_settings)
-                    }
-        #elif (mktime(localtime()) - mktime(picture_data['timestamp'])) > 1800: 
-        #    return HTTPFound(location='/photo') 
-        else:
-            return {'project': 'raspistillWeb',
-                    'imagedata' : picture_data,
-                    'timelapse' : timelapse,
-                    'downloadInProgress': check_new_images_on_devices(app_settings)
-                    }
+            picture_data = get_picture_data(pictures[-1],file_list)
+            if timelapse:            
+                return {'project': 'raspistillWeb',
+                        'imagedata' : picture_data,
+                        'timelapse' : timelapse,
+                        'downloadInProgress': check_new_images_on_devices(app_settings)
+                        }
+               #elif (mktime(localtime()) - mktime(picture_data['timestamp'])) > 1800: 
+               #    return HTTPFound(location='/photo') 
+            else:
+                return {'project': 'raspistillWeb',
+                        'imagedata' : picture_data,
+                        'timelapse' : timelapse,
+                        'downloadInProgress': check_new_images_on_devices(app_settings)
+                        }
 
 # View for the /timelapse site
 @view_config(route_name='timelapse', renderer='timelapse.mako')
@@ -548,7 +548,7 @@ def save_view(request):
     gdrive_folder_temp = request.params['gdriveFolder']
     #gdrive_user_temp = request.params['gdriveUser']
     #gdrive_secret_temp = request.params['gdriveSecret']
-    gdrive_auth_token_temp = request.params['gdrive_auth_token']
+    gdrive_auth_token_temp = request.params['gdrive_auth_token'] if 'gdrive_auth_token' in request.params else None
     gdrive_delete_files_temp = request.params['gdriveDelete']
     number_shots_temp = request.params['numberImages']
     command_before_sequence_temp = request.params['commandBeforeAcquisition']
