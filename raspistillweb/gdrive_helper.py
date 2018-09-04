@@ -18,7 +18,7 @@ GDRIVE_OBJECT = None
 try:
 	from apscheduler.schedulers.background import BackgroundScheduler as Scheduler
 	
-	GDRIVE_SCHEDULER=None#Scheduler()
+	GDRIVE_SCHEDULER=Scheduler()
 			
 except ImportError:
 	GDRIVE_SCHEDULER=None
@@ -26,6 +26,7 @@ except ImportError:
 
 
 def gdrive_uploader_job(app_settings):
+    print "Job started"
     if (is_gdrive_operative(app_settings)):
 		lst = glob(os.path.join(v.RASPISTILL_DIRECTORY,'IMG*.'+app_settings.encoding_mode))
 		
@@ -118,6 +119,7 @@ def gdrive_authentication(auth_code=None , force=False):
 				gauth.Auth(auth_code)
 				GDRIVE_OBJECT = GoogleDrive(gauth)
 			except AuthenticationError, ae:
+				print ">>>>>>"+str(ae)
 				return None
 		else:
 			return None
