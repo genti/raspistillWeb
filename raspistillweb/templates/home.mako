@@ -31,15 +31,13 @@
             <dd>${imagedata['date']}</dd>
             <dt>Filesize</dt>
             <dd>${imagedata['filesize']}</dd>
-            <dt>Filename</dt>
-            <dd>${imagedata['filename']}</dd>
             <dt>Image Resolution</dt>
             <dd>${imagedata['resolution']}</dd>
-            <dt>Encoding Mode</dt>
-            <dd>${imagedata['encoding_mode']}</dd>
             <dt>ISO</dt>
             <dd>${imagedata['ISO']}</dd>
-            <dt>Exposure Mode</dt>
+            <dt>Exposure Time</dt>
+            <dd>${imagedata['exposure_time']}</dd>
+            <dt>Image Exposure Mode</dt>
             <dd>${imagedata['exposure_mode']}</dd>
             <dt>Image Effect</dt>
             <dd>${imagedata['image_effect']}</dd>
@@ -51,3 +49,5 @@
     </div>
   </div>  
 </div>
+  	
+

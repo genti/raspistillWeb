@@ -35,59 +35,55 @@
         </div>
         <div class="panel-body">
       	  <form action="save" method="POST" class="form-horizontal" role="form">
-      	    <div class="form-group">
-      	      <label class="col-lg-2 control-label">Device Name</label>
-              <div class="col-lg-10">
-      	        <input type="text" class="form-control" placeholder="${hostName}" title="Name used to identify this Phenotiki device in a network." readonly>
-      	      </div>
-      	    </div>
-      	    
-            <span class="help-block">Image preferences:</span>
-            
+            <span class="help-block">Image preferences:</span>            
             <div class="form-group">
               <label for="imageResolution1" class="col-lg-2 control-label">Image Resolution</label>
               <div class="col-sm-3">
                 <select name="imageResolution" class="form-control" id="imageResolution1">
-                  <option selected>${image_width}x${image_height}</option>
-                    % for resolution in image_resolutions:
-                      % if resolution != image_width + 'x' + image_height:                               
-                        <option>${resolution}</option>
+                      <option selected>${image_width}x${image_height}</option>
+                  % for resolution in image_resolutions:
+                    % if resolution != image_width + 'x' + image_height:                               
+                      <option>${resolution}</option>
                       % endif
-                    % endfor
+                  % endfor
                 </select>
               </div>
-              <div class="col-sm-1 text-center">
+              <div class="col-sm-1">
                 <label for="imageResolution2" class="control-label">or</label>
               </div>
+                            
               
               <div class="col-md-4 col-lg-3 col-sm-4">
                 <div class="input-group">
-                  <span class="input-group-addon"><span class="glyphicon glyphicon-resize-horizontal"></span></span>
-                  <input type="number" class="form-control" name="imageWidth" min="1" max="3280" placeholder="${image_width}" title="Set custom width (pixels).">
+                  <span class="input-group-addon">width</span>
+                  <input type="number" class="form-control" name="imageWidth" placeholder="${image_width}">
                 </div>
               </div>
               <div class="col-md-4 col-lg-3 col-sm-4">
                 <div class="input-group">
-                  <span class="input-group-addon"><span class="glyphicon glyphicon-resize-vertical"></span></span>
-                  <input type="number" class="form-control" name="imageHeight" min="1" max="2464" placeholder="${image_height}" title="Set custom height (pixels).">
+                  <span class="input-group-addon">height</span>
+                  <input type="number" class="form-control" name="imageHeight" placeholder="${image_height}">
                 </div>                
               </div>
             </div>
             
-            <div class="form-group">
-              <label for="ecodingMode1" class="col-lg-2 control-label">Encoding Mode</label>
+            
+                 <div class="form-group">
+              <label for="shaOption1" class="col-lg-2 control-label">SHARPNESS Option</label>
               <div class="col-lg-10">
-                <select name="encodingMode" class="form-control" id="encodingMode1">
-                  % for mode in encoding_modes:
-                    % if mode == encoding_mode:
-                      <option selected>${mode}</option>
+                <select name="shaOption" class="form-control" id="shaOption1">
+                  % for option in sha_options:
+                    % if option == image_sha:
+                      <option selected>${option}</option>
                     % else:
-                      <option>${mode}</option>
+                      <option>${option}</option>
                     % endif
                   % endfor
                 </select>
               </div>
             </div>
+            
+                                          
             
             <div class="form-group">
               <label for="isoOption1" class="col-lg-2 control-label">ISO Option</label>
@@ -104,6 +100,8 @@
               </div>
             </div>
             
+            
+            
             <div class="form-group">
               <label for="exposureMode1" class="col-lg-2 control-label">Exposure Mode</label>
               <div class="col-lg-10">
@@ -118,7 +116,6 @@
                 </select>
               </div>
             </div>
-            
             <div class="form-group">
               <label for="imageEffect1" class="col-lg-2 control-label">Image Effect</label>
               <div class="col-lg-10">
@@ -133,7 +130,6 @@
                 </select>
               </div>  
             </div>
-            
             <div class="form-group">
               <label for="awbMode1" class="col-lg-2 control-label">AWB Mode</label>
               <div class="col-lg-10">
@@ -148,14 +144,13 @@
                 </select>
               </div>  
             </div>
-            
             <div class="form-group">
               <label for="imageRotation1" class="col-lg-2 control-label">Image Rotation</label>
               <div class="col-lg-10">
                 <div class="btn-group" data-toggle="buttons">
                   <label class="btn btn-default ${'active' if image_rotation == '0' else ''}">
                     <input type="radio" name="imageRotation" value="0" ${'checked' if image_rotation == '0' else ''}><span class="glyphicon glyphicon-circle-arrow-up"></span> 0°
-                  </label>
+                   </label>
                   <label class="btn btn-default ${'active' if image_rotation == '90' else ''}">
                     <input type="radio" name="imageRotation" value="90" ${'checked' if image_rotation == '90' else ''}><span class="glyphicon glyphicon-circle-arrow-right"></span> 90°
                   </label>
@@ -168,85 +163,22 @@
                 </div>
               </div>  
             </div>
-            
             <span class="help-block">Timelapse preferences:</span>
-            
       	    <div class="form-group">
-              <label for="TimelapseInterval1" class="col-lg-2 control-label">Interval</label>
+              <label for="TimelapseInterval1" class="col-lg-2 control-label">Timelapse Interval (s)</label>
               <div class="col-lg-10">
-                <div class="input-group">
-                  <input type="number" class="form-control" id="TimelapseInterval1" name="timelapseInterval" min="1" value="${timelapse_interval}" title="Time (seconds) between image acquisitions.">
-                  <span class="input-group-addon">sec</span>
-                </div>
-                <!--<input type="number" class="form-control" id="TimelapseInterval1" name="timelapseInterval" placeholder="${timelapse_interval}">-->
+                <input type="number" class="form-control" id="TimelapseInterval1" name="timelapseInterval" placeholder="${timelapse_interval}">
               </div>
             </div>
-            
       	    <div class="form-group">
-              <label for="TimelapseTime1" class="col-lg-2 control-label">Event Duration</label>
+              <label for="TimelapseTime1" class="col-lg-2 control-label">Timelapse Time (h)</label>
               <div class="col-lg-10">
-                <div class="input-group">
-                  <input type="number" class="form-control" id="TimelapseTime1" name="timelapseTime" min="1" value="${timelapse_time}" title="Total duration (seconds) of the time-lapse acquisition.">
-                  <span class="input-group-addon">sec</span>
-                </div>
-                <!--<input type="number" class="form-control" id="TimelapseTime1" name="timelapseTime" placeholder="${timelapse_time}">-->
+                <input type="number" class="form-control" id="TimelapseTime1" name="timelapseTime" placeholder="${timelapse_time}">
               </div>
             </div>
-            
-            <span class="help-block"><h4>Bisque preferences:</h4></span>
-            
-            <div class="form-group">
-              <label for="BisqueEnabled1" class="col-lg-2 control-label">Bisque Sync</label>
-              <div class="col-lg-10">
-                <div class="btn-group" data-toggle="buttons">
-                  <label class="btn btn-default ${'active' if bisque_enabled == 'Yes' else ''}" title="Transmit acquired images to Bisque.">
-                    <input type="radio" name="bisqueEnabled" value="Yes" ${'checked' if bisque_enabled == 'Yes' else ''}> Yes
-                  </label>
-                  <label class="btn btn-default ${'active' if bisque_enabled == 'No' else ''}" title="Acquired images are not transmitted to Bisque.">
-                    <input type="radio" name="bisqueEnabled" value="No" ${'checked' if bisque_enabled == 'No' else ''}> No
-                  </label>
-                </div>
-              </div>  
-            </div>
-            
-            <div class="form-group">
-              <label for="BisqueUser1" class="col-lg-2 control-label">Username</label>
-              <div class="col-lg-10">
-                <input type="text" class="form-control" id="BisqueUser1" name="bisqueUser" value="${bisque_user}">
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="BisquePswd1" class="col-lg-2 control-label">Password</label>
-              <div class="col-lg-10">
-                <input type="password" class="form-control" id="BisquePswd1" name="bisquePswd" value="${bisque_pswd}">
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="BisqueRootUrl1" class="col-lg-2 control-label">Bisque Root URL</label>
-              <div class="col-lg-10">
-                <input type="url" class="form-control" id="BisqueRootUrl1" name="bisqueRootUrl" value="${bisque_root_url}">
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="BisqueLocalCopy1" class="col-lg-2 control-label">Keep Local Copy</label>
-              <div class="col-lg-10">
-                <div class="btn-group" data-toggle="buttons">
-                  <label class="btn btn-default ${'active' if bisque_local_copy == 'Yes' else ''}" title="Keep a copy of image files on the device.">
-                    <input type="radio" name="bisqueLocalCopy" value="Yes" ${'checked' if bisque_local_copy == 'Yes' else ''}> Yes
-                  </label>
-                  <label class="btn btn-default ${'active' if bisque_local_copy == 'No' else ''}" title="Delete images from the device after transmission to Bisque.">
-                    <input type="radio" name="bisqueLocalCopy" value="No" ${'checked' if bisque_local_copy == 'No' else ''}> No
-                  </label>
-                </div>
-              </div>  
-            </div>
-            
             <div class="form-group">
               <div class="col-lg-offset-2 col-lg-10">
-                <button type="submit" formmethod="POST" class="btn btn-primary">Save</button>
+                <button type="submit" class="btn btn-primary">Save</button>
               </div>
             </div>
           </form>

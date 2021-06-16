@@ -45,8 +45,6 @@ def main(global_config, **settings):
     config.add_route('timelapse','/timelapse')
     config.add_route('photo','/photo')
     config.add_route('timelapse_start','/timelapse_start')
-    config.add_route('timelapse_stop','/timelapse_stop')
-    config.add_route('reboot','/reboot')
     config.add_route('shutdown','/shutdown')
     config.scan()
     return config.make_wsgi_app()

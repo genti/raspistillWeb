@@ -18,13 +18,11 @@ requires = [
     'SQLAlchemy',#fordb
     'transaction',#fordb
     'zope.sqlalchemy',#fordb
-    'Pillow',
-    'picamera',
     ]
 
 setup(name='raspistillWeb',
       version='0.2',
-      description='raspistillWeb-Phenotiki',
+      description='raspistillWeb',
       long_description=README + '\n\n' + CHANGES,
       classifiers=[
         "Programming Language :: Python",
@@ -32,10 +30,10 @@ setup(name='raspistillWeb',
         "Topic :: Internet :: WWW/HTTP",
         "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
         ],
-      author='Massimo Minervini',
-      author_email='minervini.massimo@gmail.com',
+      author='Tim Jungnickel',
+      author_email='tim.jungnickel@gmail.com',
       url='',
-      keywords='phenotiki plant phenotyping web pyramid pylons raspberry pi raspberrypi rpi raspistill',
+      keywords='web pyramid pylons raspberry pi raspberrypi rpi raspistill',
       packages=find_packages(),
       include_package_data=True,
       zip_safe=False,

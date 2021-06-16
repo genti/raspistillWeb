@@ -12,9 +12,10 @@ from sqlalchemy.orm import (
     sessionmaker,
     )
 
-from zope.sqlalchemy import ZopeTransactionExtension
+from zope.sqlalchemy import register
 
-DBSession = scoped_session(sessionmaker(extension=ZopeTransactionExtension()))
+DBSession = scoped_session(sessionmaker(autoflush=False))
+register(DBSession)
 Base = declarative_base()
 
 
@@ -27,10 +28,11 @@ class Picture(Base):
     awb_mode = Column(Text)
     resolution = Column(Text)
     ISO = Column(Integer)
+    SHA = Column(Integer)
+    exposure_time = Column(Text)
     date = Column(Text)
     timestamp = Column(Text)
     filesize = Column(Integer)
-    encoding_mode = Column(Text)
 
 class Settings(Base):
     __tablename__ = 'settings'
@@ -43,13 +45,8 @@ class Settings(Base):
     image_effect = Column(Text)
     awb_mode = Column(Text)
     image_ISO = Column(Text)
+    image_SHA = Column(Text)
     image_rotation = Column(Text)
-    encoding_mode = Column(Text)
-    bisque_enabled = Column(Text)
-    bisque_user = Column(Text)
-    bisque_pswd = Column(Text)
-    bisque_root_url = Column(Text)
-    bisque_local_copy = Column(Text)
 
 class Timelapse(Base):
     __tablename__ = 'timelapse'
@@ -60,8 +57,5 @@ class Timelapse(Base):
     exposure_mode = Column(Text)
     awb_mode = Column(Text)
     timeEnd = Column(Text)
-    n_images = Column(Integer)
-    resolution = Column(Text)
-    encoding_mode = Column(Text)
 
 Index('my_index', Picture.filename, unique=True, mysql_length=255)

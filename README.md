@@ -4,8 +4,6 @@ Small Python web interface for raspistill to take photos with the RaspberryPi in
 
 ![alt text](https://raw.github.com/TimJuni/raspistillWeb/master/raspistillweb/pictures/preview.jpg "raspistillWeb preview")
 
-Important notice: this version of raspistillWeb is a fork of the original project by Tim Jungnickel (tim.jungnickel@gmail.com). This fork was created and is maintained by Massimo Minervini (minervini.massimo@gmail.com) with the purpose of adding features relevant to the Phenotiki project (http://phenotiki.com) for plant phenotyping applications.
-
 ## Requirements
 
 For a successful installation you need:

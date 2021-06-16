@@ -39,48 +39,39 @@ def main(argv=sys.argv):
     Base.metadata.create_all(engine)
     with transaction.manager:
         picture = Picture(
-                        filename = '-',
-                        image_effect = '-',
-                        exposure_mode = '-',
-                        awb_mode = '-',
-                        resolution = '-',
+                        filename = '1',
+                        image_effect = '1',
+                        exposure_mode = '1',
+                        awb_mode = '1',
+                        resolution = '1',
                         ISO = 1,
-                        date = '-',
-                        timestamp = '-',
-                        filesize = 1,
-                        encoding_mode = '-'
+                        exposure_time ='1',
+                        date = '1',
+                        timestamp = '1',
+                        filesize = '1'
                         )
         DBSession.add(picture)
 
         app_settings = Settings(
-                        image_width = 1024,
-                        image_height = 768,
-                        timelapse_interval = 5,
-                        timelapse_time = 20,
+                        image_width = 800,
+                        image_height = 600,
+                        timelapse_interval = 4000,
+                        timelapse_time = 20000,
                         exposure_mode = 'auto',
                         image_effect = 'none',
                         awb_mode = 'auto',
                         image_ISO = 'auto',
-                        image_rotation = '180',
-                        encoding_mode = 'jpg',
-                        bisque_enabled = 'No',
-                        bisque_user = '',
-                        bisque_pswd = '',
-                        bisque_root_url = 'http://bisque.iplantcollaborative.org',
-                        bisque_local_copy = 'Yes'
+                        image_rotation = '0'
                         )
         DBSession.add(app_settings)
 
         timelapse = Timelapse(
-                        filename = '-',
-                        timeStart = '-',
-                        image_effect = '-',
-                        exposure_mode = '-',
-                        awb_mode = '-',
-                        timeEnd = '-',
-                        n_images = 1,
-                        resolution = '-',
-                        encoding_mode = '-',
+                        filename = 'test',
+                        timeStart = 'test',
+                        image_effect = 'test',
+                        exposure_mode = 'test',
+                        awb_mode = 'auto',
+                        timeEnd = 'none'
                         )
 
         DBSession.add(timelapse)
