@@ -1,0 +1,5 @@
+      [paste.app_factory]
+      main = raspistillweb:main
+      [console_scripts]
+      initialize_raspistillweb_db = raspistillweb.scripts.initializedb:main
+      

@@ -1,0 +1,9 @@
+pyramid
+pyramid_debugtoolbar
+waitress
+pyramid_mako
+exifread
+pyramid_tm
+SQLAlchemy
+transaction
+zope.sqlalchemy
